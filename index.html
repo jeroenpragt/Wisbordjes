@@ -25,8 +25,9 @@ button.on{background:var(--primary);border-color:var(--primary);color:#fff;box-s
 button.on:hover{background:var(--primary-d)}
 button#go,button#new{background:var(--green);border-color:var(--green);color:#fff;box-shadow:0 4px 12px #14b78955}
 button#go:hover,button#new:hover{background:#0fa377}
-#cl.on{background:var(--coral);border-color:var(--coral);box-shadow:0 4px 12px #ff6a5555}
-#cl.on:hover{background:#f0553f}
+#cl.on,#fz.on{background:var(--coral);border-color:var(--coral);box-shadow:0 4px 12px #ff6a5555}
+#cl.on:hover,#fz.on:hover{background:#f0553f}
+#fz{padding:8px 12px;font-size:1.05rem;line-height:1}
 button:disabled{opacity:.5;cursor:not-allowed}
 a{color:var(--primary);font-weight:600;text-decoration:none}
 a:hover{text-decoration:underline}
@@ -201,7 +202,7 @@ async function student(code) {
   const b = ls.g('wb_board_' + code) || { s: [], t: [] };
   const SW = ['#1f2340', '#ff6a55', '#ffc93c', '#14b789', '#5b94c8', '#7c5cf0'];
   let tool = 'pen', color = SW[0], sz = 6, cur = null, timer = 0, sc = 1, raf = 0;
-  let blocked = true, wr = false, pend = false, joined = false, locked = false, timerEnd = null;
+  let blocked = true, wr = false, pend = false, joined = false, locked = false, timerEnd = null, frozen = false;
 
   app.innerHTML = `<div class="st"><div class="bar">
     <button data-t="pen" class="on">✏️ Pen</button><button data-t="hl">🖍️ Marker</button>
@@ -242,19 +243,30 @@ async function student(code) {
   document.addEventListener('visibilitychange', chk); addEventListener('blur', chk); addEventListener('focus', chk); addEventListener('pagehide', () => joined && !blocked && ch.track({ name, away: true }));
 
   // Toegang controleren
-  const { data: ses } = await sb.from('sessions').select('code,closed,timer_end').eq('code', code).maybeSingle();
+  const { data: ses } = await sb.from('sessions').select('code,closed,timer_end,frozen_at').eq('code', code).maybeSingle();
   if (!ses) return setBlock('Deze sessie bestaat niet (of de verbinding mislukte).', true);
   const { data: kk } = await sb.from('kicked').select('student').eq('code', code).eq('student', uid).maybeSingle();
   const { data: own } = await sb.from('boards').select('data').eq('code', code).eq('student', uid).maybeSingle();
   let closed = ses.closed, kicked = !!kk, hasBoard = !!own;
-  timerEnd = ses.timer_end ? Date.parse(ses.timer_end) : null;
+  timerEnd = ses.timer_end ? Date.parse(ses.timer_end) : null; frozen = !!ses.frozen_at;
   if (own && !b.s.length && !b.t.length && own.data) { // lokaal leeg (bv. andere browser): haal serverbord op
     Object.assign(b, own.data); b.s = b.s || []; b.t = b.t || []; redraw();
   }
 
+  // Verwijderd door de docent: melding, daarna terug naar het beginscherm om opnieuw in te voeren
+  let ejecting = false;
+  const ejected = async () => {
+    if (ejecting) return; ejecting = true;
+    setBlock(KICK + ' Je wordt doorgestuurd naar het beginscherm…');
+    if (joined) ch.untrack();
+    await sb.from('kicked').delete().eq('code', code).eq('student', uid); // opnieuw meedoen mag weer
+    try { localStorage.removeItem('wb_board_' + code); localStorage.removeItem('wb_name_' + code); } catch {}
+    setTimeout(() => { location.href = location.pathname; }, 2500);
+  };
+
   // Bepaalt of de leerling mag tekenen; wordt aangeroepen bij elke wijziging van de sessie
   const apply = async () => {
-    if (kicked) { setBlock(KICK); if (joined) ch.untrack(); return; }
+    if (kicked) return ejected();
     if (closed) { setBlock('De docent heeft de sessie gesloten. Je kunt niet meer tekenen.'); if (joined) ch.untrack(); return; }
     if (!hasBoard) {
       const { error } = await sb.from('boards').insert({ code, student: uid, name, data: b });
@@ -267,25 +279,26 @@ async function student(code) {
   ch.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'kicked', filter: 'code=eq.' + code },
       p => { if (p.new.student === uid) { kicked = true; apply(); } })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sessions', filter: 'code=eq.' + code },
-      p => { closed = !!p.new.closed; timerEnd = p.new.timer_end ? Date.parse(p.new.timer_end) : null; apply(); evalTimer(); })
+      p => { closed = !!p.new.closed; timerEnd = p.new.timer_end ? Date.parse(p.new.timer_end) : null; frozen = !!p.new.frozen_at; apply(); evalTimer(); })
     .subscribe(s => { if (s === 'SUBSCRIBED') { joined = true; chk(); } });
   apply();
   // vangnet: ook als een realtime-bericht gemist wordt, volgt de status binnen 10 seconden
   setInterval(async () => {
-    const { data } = await sb.from('sessions').select('closed,timer_end').eq('code', code).maybeSingle();
+    const { data } = await sb.from('sessions').select('closed,timer_end,frozen_at').eq('code', code).maybeSingle();
     if (!data) return;
-    const te = data.timer_end ? Date.parse(data.timer_end) : null, changed = data.closed !== closed || te !== timerEnd;
-    closed = data.closed; timerEnd = te;
+    const te = data.timer_end ? Date.parse(data.timer_end) : null, fr = !!data.frozen_at;
+    const changed = data.closed !== closed || te !== timerEnd || fr !== frozen;
+    closed = data.closed; timerEnd = te; frozen = fr;
     if (changed) { apply(); evalTimer(); }
   }, 10000);
 
   // Timer: tijdens de timer mag je tekenen; daarna is het bord vergrendeld (wel zichtbaar)
   const pill = $('#tpill');
   function evalTimer() {
-    const left = timerEnd ? timerEnd - nowS() : null, lock = left !== null && left <= 0;
-    pill.hidden = left === null;
+    const left = timerEnd ? timerEnd - nowS() : null, timerLock = left !== null && left <= 0, lock = timerLock || frozen;
+    pill.hidden = left === null && !frozen;
     pill.classList.toggle('done', lock);
-    if (left !== null) pill.textContent = lock ? '⏱ Tijd is om' : '⏱ ' + fmt(left);
+    pill.textContent = timerLock ? '⏱ Tijd is om' : frozen ? '🔒 Vergrendeld door docent' : left !== null ? '⏱ ' + fmt(left) : '';
     if (lock !== locked) {
       locked = lock; $('.st').classList.toggle('locked', locked);
       if (locked) {
@@ -350,13 +363,13 @@ async function student(code) {
 async function teacher(code) {
   const { data: ses } = await sb.from('sessions').select('*').eq('code', code).eq('owner', uid).maybeSingle();
   if (!ses) return fatal('Deze sessie bestaat niet of is van een andere docent/browser. <a href="./">Terug</a>');
-  const st = { hide: ses.hide, shield: ses.shield, closed: ses.closed }, users = {}, els = {};
+  const st = { hide: ses.hide, shield: ses.shield, closed: ses.closed }, users = {}, els = {}, all = {}, seen = new Set();
   let online = {}, ready = false;
-  let timerEnd = ses.timer_end ? Date.parse(ses.timer_end) : null;
+  let timerEnd = ses.timer_end ? Date.parse(ses.timer_end) : null, frozen = !!ses.frozen_at;
 
   app.innerHTML = `<div class="tb"><a href="./">← Sessies</a><b>${esc(ses.name)}</b>
     <span class="code">${code}</span><button id="cp">Link kopiëren</button>
-    <button id="h"></button><button id="sh"></button><button id="cl"></button>
+    <button id="h"></button><button id="sh"></button><button id="cl"></button><button id="fz">🔓</button>
     <span class="tm"><input id="tmin" type="number" min="0.5" step="0.5" max="180" value="${ls.g('wb_tmin') || 5}" title="Minuten"><button id="tgo">⏱ Start timer</button><span id="tpill" class="tpill" hidden></span><button id="tx" title="Timer wegklikken" hidden>✕</button></span>
     <span id="cnt"></span></div><div id="grid"></div>`;
   const grid = $('#grid');
@@ -384,7 +397,10 @@ async function teacher(code) {
     if (zoomId) { if (eff()) closeZoom(); else zdraw(); }
     grid.classList.toggle('hide', st.hide); grid.classList.toggle('shield', eff());
     $('#h').classList.toggle('on', st.hide); $('#h').textContent = st.hide ? 'Namen tonen' : 'Namen verbergen';
-    $('#sh').classList.toggle('on', st.shield); $('#sh').disabled = timerEnd !== null; $('#sh').textContent = st.shield ? 'Wisbordjes tonen' : 'Wisbordjes afschermen';
+    $('#sh').classList.toggle('on', st.shield); $('#sh').disabled = timerEnd !== null;
+    const fz = $('#fz'), ft = frozen ? 'Wisbordjes ontgrendelen' : 'Wisbordjes vergrendelen (leerlingen kunnen niet tekenen)';
+    fz.classList.toggle('on', frozen); fz.textContent = frozen ? '🔒' : '🔓'; fz.disabled = timerEnd !== null;
+    fz.title = ft; fz.setAttribute('aria-label', ft); $('#sh').textContent = st.shield ? 'Wisbordjes tonen' : 'Wisbordjes afschermen';
     $('#cl').classList.toggle('on', st.closed); $('#cl').textContent = st.closed ? 'Sessie openen' : 'Sessie sluiten';
     const n = Object.keys(users).length; $('#cnt').textContent = n + ' leerling' + (n === 1 ? '' : 'en');
   };
@@ -400,7 +416,20 @@ async function teacher(code) {
     $('#cp').textContent = 'Gekopieerd!'; setTimeout(() => $('#cp').textContent = 'Link kopiëren', 1500);
   };
 
-  const drop = id => { if (zoomId === id) closeZoom(); delete users[id]; els[id] && els[id].remove(); delete els[id]; ui(); };
+  const hide = id => { if (zoomId === id) closeZoom(); delete users[id]; els[id] && els[id].remove(); delete els[id]; };
+  const drop = id => { delete all[id]; seen.delete(id); hide(id); ui(); };
+
+  // Raster begint leeg: alleen leerlingen die in deze sessierun meedoen (bord bijgewerkt na het openen, of nu verbonden)
+  const runKey = 'wb_run_' + code;
+  const navType = (performance.getEntriesByType('navigation')[0] || {}).type;
+  let runStart = 0;
+  if (navType !== 'navigate') { try { runStart = Number(sessionStorage.getItem(runKey)) || 0; } catch {} } // verversen behoudt het raster
+  if (!runStart) { runStart = nowS(); try { sessionStorage.setItem(runKey, String(runStart)); } catch {} }
+  const sync = id => {
+    const a = all[id]; if (!a) return;
+    if (Date.parse(a.ts) >= runStart || online[id]) seen.add(id);
+    if (seen.has(id)) { users[id] = a; upd(id); if (zoomId === id) zdraw(); } else hide(id);
+  };
   function upd(id) {
     const u = users[id]; if (!u) return;
     let el = els[id];
@@ -423,7 +452,7 @@ async function teacher(code) {
     el.querySelector('.warn').title = o ? 'Leerling heeft het tabblad verlaten' : 'Leerling is offline';
     if (el._ts !== u.ts) { el._ts = u.ts; draw(el.querySelector('canvas'), { s: [], t: [], ...u.data }, 400); }
   }
-  const setU = r => { users[r.student] = { name: r.name, data: r.data, ts: r.updated_at }; upd(r.student); if (zoomId === r.student) zdraw(); ui(); };
+  const setU = r => { all[r.student] = { name: r.name, data: r.data, ts: r.updated_at }; sync(r.student); ui(); };
 
   // Timer
   let wasRun = running();
@@ -449,11 +478,16 @@ async function teacher(code) {
     ls.s('wb_tmin', min);
     const { data, error } = await sb.rpc('start_timer', { p_code: code, p_seconds: Math.round(min * 60) });
     if (error || !data) return alert('Timer starten mislukt. Is update-timer.sql uitgevoerd in Supabase? ' + (error ? error.message : ''));
-    timerEnd = Date.parse(data); ui(); tui();
+    timerEnd = Date.parse(data); frozen = false; ui(); tui();
   };
   $('#tx').onclick = async () => { // timer wegklikken: leerlingen kunnen weer tekenen
     await sb.from('sessions').update({ timer_end: null }).eq('code', code);
     timerEnd = null; wasRun = false; ui(); tui();
+  };
+  $('#fz').onclick = async () => { // alleen zonder timer: leerlingen kunnen het bord wel zien, niet wijzigen
+    const { error } = await sb.rpc('set_frozen', { p_code: code, p_frozen: !frozen });
+    if (error) return alert('Vergrendelen mislukt. Is update-bordjes.sql uitgevoerd in Supabase? ' + error.message);
+    frozen = !frozen; ui();
   };
   setInterval(tui, 300);
 
@@ -465,7 +499,7 @@ async function teacher(code) {
   ch.on('presence', { event: 'sync' }, () => {
     online = {}; const s = ch.presenceState();
     for (const k in s) online[k] = s[k][s[k].length - 1];
-    ready = true; Object.keys(users).forEach(upd);
+    ready = true; Object.keys(all).forEach(sync); ui();
   })
   .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => setU(p.new))
   .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => setU(p.new))
