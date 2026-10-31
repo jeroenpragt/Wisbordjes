@@ -27,6 +27,7 @@ button#go,button#new{background:var(--green);border-color:var(--green);color:#ff
 button#go:hover,button#new:hover{background:#0fa377}
 #cl.on{background:var(--coral);border-color:var(--coral);box-shadow:0 4px 12px #ff6a5555}
 #cl.on:hover{background:#f0553f}
+button:disabled{opacity:.5;cursor:not-allowed}
 a{color:var(--primary);font-weight:600;text-decoration:none}
 a:hover{text-decoration:underline}
 /* startpagina */
@@ -67,6 +68,12 @@ a:hover{text-decoration:underline}
 .cd .bt{display:flex;gap:4px}
 .cd .bt button{padding:4px 10px}
 .cd.off canvas{opacity:.35}
+.tpill{background:var(--yellow);color:var(--ink);font-weight:800;border-radius:999px;padding:6px 14px;font-variant-numeric:tabular-nums}
+.tpill.done{background:var(--coral);color:#fff}
+.tm{display:flex;gap:6px;align-items:center}
+#tmin{width:84px;padding:8px 10px}
+.st.locked .bar button:not(#fs),.st.locked .bar select,.st.locked .bar .sw{opacity:.4;pointer-events:none}
+.st.locked #cv{cursor:not-allowed}
 .warn{position:absolute;top:10px;right:10px;width:32px;height:32px;border-radius:50%;background:var(--red);color:#fff;font-weight:800;font-size:20px;box-shadow:0 2px 8px #ff4d4f77;display:none;align-items:center;justify-content:center}
 .cd.away .warn{display:flex}
 .hide .nm{visibility:hidden}
@@ -76,6 +83,7 @@ a:hover{text-decoration:underline}
 #zoom{position:fixed;inset:0;background:rgba(31,35,64,.82);z-index:30;display:flex;align-items:center;justify-content:center;padding:16px}
 #zoom .zb{display:flex;flex-direction:column;gap:10px}
 #zoom .zh{display:flex;justify-content:space-between;align-items:center;color:#fff;font-size:1.1em;min-height:38px}
+#zoom .zx{color:var(--ink)}
 #zoom canvas{width:min(92vw,calc((100dvh - 110px) * 1.7142857));height:auto;background:#fff;border-radius:16px;box-shadow:0 20px 60px #0006}
 </style>
 </head>
@@ -124,7 +132,15 @@ const sb = (typeof supabase !== 'undefined' && !SUPABASE_URL.includes('JOUW-')) 
 const qs = new URLSearchParams(location.search);
 const cleanCode = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
 const fatal = t => { app.innerHTML = `<div class="c"><div class="card">${t}</div></div>`; };
-let uid = null;
+let uid = null, skew = 0;
+const nowS = () => Date.now() + skew; // tijd volgens de server
+const fmt = ms => { const t = Math.max(0, Math.ceil(ms / 1000)); return String(t / 60 | 0).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); };
+async function syncClock() {
+  try {
+    const t0 = Date.now(), { data } = await sb.rpc('server_now'), t1 = Date.now();
+    if (data) skew = Date.parse(data) - (t0 + t1) / 2;
+  } catch {}
+}
 
 async function start() {
   if (!sb) return fatal('Vul eerst <b>SUPABASE_URL</b> en <b>SUPABASE_KEY</b> in bovenin index.html in.');
@@ -135,6 +151,7 @@ async function start() {
     session = r.data.session;
   }
   uid = session.user.id;
+  await syncClock();
   if (qs.get('s')) return student(cleanCode(qs.get('s')));
   if (qs.get('t')) return teacher(cleanCode(qs.get('t')));
   home();
@@ -184,7 +201,7 @@ async function student(code) {
   const b = ls.g('wb_board_' + code) || { s: [], t: [] };
   const SW = ['#1f2340', '#ff6a55', '#ffc93c', '#14b789', '#5b94c8', '#7c5cf0'];
   let tool = 'pen', color = SW[0], sz = 6, cur = null, timer = 0, sc = 1, raf = 0;
-  let blocked = true, wr = false, pend = false, joined = false;
+  let blocked = true, wr = false, pend = false, joined = false, locked = false, timerEnd = null;
 
   app.innerHTML = `<div class="st"><div class="bar">
     <button data-t="pen" class="on">✏️ Pen</button><button data-t="hl">🖍️ Marker</button>
@@ -192,7 +209,8 @@ async function student(code) {
     <span class="sws">${SW.map((c, i) => `<button class="sw${i ? '' : ' sel'}" data-c="${c}" style="background:${c}" title="Kleur"></button>`).join('')}<label class="sw plus" title="Eigen kleur">+<input type="color" id="col" value="#1f2340"></label></span>
     <select id="sz"><option value="3">Dun</option><option value="6" selected>Middel</option><option value="12">Dik</option></select>
     <button id="undo">↶</button><button id="clr">Alles wissen</button>
-    <span class="sp"></span><small>${esc(name)} · ${esc(code)}</small></div>
+    <span id="tpill" class="tpill" hidden></span>
+    <span class="sp"></span><small>${esc(name)} · ${esc(code)}</small><button id="fs">⛶ Volledig scherm</button></div>
     <div id="wrap"><div id="box"><canvas id="cv"></canvas></div></div></div>
     <div id="msg">Verbinden…</div>`;
   const cv = $('#cv'), box = $('#box'), msg = $('#msg');
@@ -224,11 +242,12 @@ async function student(code) {
   document.addEventListener('visibilitychange', chk); addEventListener('blur', chk); addEventListener('focus', chk); addEventListener('pagehide', () => joined && !blocked && ch.track({ name, away: true }));
 
   // Toegang controleren
-  const { data: ses } = await sb.from('sessions').select('code,closed').eq('code', code).maybeSingle();
+  const { data: ses } = await sb.from('sessions').select('code,closed,timer_end').eq('code', code).maybeSingle();
   if (!ses) return setBlock('Deze sessie bestaat niet (of de verbinding mislukte).', true);
   const { data: kk } = await sb.from('kicked').select('student').eq('code', code).eq('student', uid).maybeSingle();
   const { data: own } = await sb.from('boards').select('data').eq('code', code).eq('student', uid).maybeSingle();
   let closed = ses.closed, kicked = !!kk, hasBoard = !!own;
+  timerEnd = ses.timer_end ? Date.parse(ses.timer_end) : null;
   if (own && !b.s.length && !b.t.length && own.data) { // lokaal leeg (bv. andere browser): haal serverbord op
     Object.assign(b, own.data); b.s = b.s || []; b.t = b.t || []; redraw();
   }
@@ -248,18 +267,39 @@ async function student(code) {
   ch.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'kicked', filter: 'code=eq.' + code },
       p => { if (p.new.student === uid) { kicked = true; apply(); } })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sessions', filter: 'code=eq.' + code },
-      p => { closed = !!p.new.closed; apply(); })
+      p => { closed = !!p.new.closed; timerEnd = p.new.timer_end ? Date.parse(p.new.timer_end) : null; apply(); evalTimer(); })
     .subscribe(s => { if (s === 'SUBSCRIBED') { joined = true; chk(); } });
   apply();
   // vangnet: ook als een realtime-bericht gemist wordt, volgt de status binnen 10 seconden
   setInterval(async () => {
-    const { data } = await sb.from('sessions').select('closed').eq('code', code).maybeSingle();
-    if (data && data.closed !== closed) { closed = data.closed; apply(); }
+    const { data } = await sb.from('sessions').select('closed,timer_end').eq('code', code).maybeSingle();
+    if (!data) return;
+    const te = data.timer_end ? Date.parse(data.timer_end) : null, changed = data.closed !== closed || te !== timerEnd;
+    closed = data.closed; timerEnd = te;
+    if (changed) { apply(); evalTimer(); }
   }, 10000);
+
+  // Timer: tijdens de timer mag je tekenen; daarna is het bord vergrendeld (wel zichtbaar)
+  const pill = $('#tpill');
+  function evalTimer() {
+    const left = timerEnd ? timerEnd - nowS() : null, lock = left !== null && left <= 0;
+    pill.hidden = left === null;
+    pill.classList.toggle('done', lock);
+    if (left !== null) pill.textContent = lock ? '⏱ Tijd is om' : '⏱ ' + fmt(left);
+    if (lock !== locked) {
+      locked = lock; $('.st').classList.toggle('locked', locked);
+      if (locked) {
+        box.querySelectorAll('textarea').forEach(t => t.blur());
+        if (cur) { cur = null; ls.s('wb_board_' + code, b); }
+        clearTimeout(timer); write(); // laatste stand meteen opslaan
+      }
+    }
+  }
+  setInterval(evalTimer, 300); evalTimer();
 
   const pos = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W | 0, (e.clientY - r.top) / r.height * H | 0]; };
   cv.onpointerdown = e => {
-    e.preventDefault();
+    e.preventDefault(); if (locked || blocked) return;
     const [x, y] = pos(e);
     if (tool === 'tx') return addText(x, y);
     cur = { m: tool, c: color, w: tool === 'hl' ? sz * 4 : tool === 'er' ? sz * 5 : sz, p: [x, y] };
@@ -293,8 +333,17 @@ async function student(code) {
   sels().forEach(btn => btn.onclick = () => { color = btn.dataset.c; sels().forEach(o => o.classList.toggle('sel', o === btn)); });
   $('#col').oninput = e => { color = e.target.value; sels().forEach(o => o.classList.remove('sel')); };
   $('#sz').onchange = e => sz = +e.target.value;
-  $('#undo').onclick = () => { (b.s.length ? b.s : b.t).pop(); redraw(); save(); };
-  $('#clr').onclick = () => { if (confirm('Je hele wisbordje wissen?')) { b.s.length = 0; b.t.length = 0; redraw(); save(); } };
+
+  // Volledig scherm (aan/uit met dezelfde knop)
+  const de = document.documentElement, fsBtn = $('#fs');
+  const reqFs = de.requestFullscreen || de.webkitRequestFullscreen, exitFs = document.exitFullscreen || document.webkitExitFullscreen;
+  const isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  if (!reqFs) fsBtn.hidden = true; // bv. iPhone ondersteunt dit niet
+  const upFs = () => { fsBtn.textContent = isFs() ? '⤡ Volledig scherm sluiten' : '⛶ Volledig scherm'; fit(); };
+  fsBtn.onclick = () => { try { const r = isFs() ? exitFs.call(document) : reqFs.call(de); r && r.catch && r.catch(() => {}); } catch {} };
+  document.addEventListener('fullscreenchange', upFs); document.addEventListener('webkitfullscreenchange', upFs);
+  $('#undo').onclick = () => { if (locked) return; (b.s.length ? b.s : b.t).pop(); redraw(); save(); };
+  $('#clr').onclick = () => { if (!locked && confirm('Je hele wisbordje wissen?')) { b.s.length = 0; b.t.length = 0; redraw(); save(); } };
 }
 
 /* ---------- Docent ---------- */
@@ -303,11 +352,18 @@ async function teacher(code) {
   if (!ses) return fatal('Deze sessie bestaat niet of is van een andere docent/browser. <a href="./">Terug</a>');
   const st = { hide: ses.hide, shield: ses.shield, closed: ses.closed }, users = {}, els = {};
   let online = {}, ready = false;
+  let timerEnd = ses.timer_end ? Date.parse(ses.timer_end) : null;
 
   app.innerHTML = `<div class="tb"><a href="./">← Sessies</a><b>${esc(ses.name)}</b>
     <span class="code">${code}</span><button id="cp">Link kopiëren</button>
-    <button id="h"></button><button id="sh"></button><button id="cl"></button><span id="cnt"></span></div><div id="grid"></div>`;
+    <button id="h"></button><button id="sh"></button><button id="cl"></button>
+    <span class="tm"><input id="tmin" type="number" min="0.5" step="0.5" max="180" value="${ls.g('wb_tmin') || 5}" title="Minuten"><button id="tgo">⏱ Start timer</button><span id="tpill" class="tpill" hidden></span><button id="tx" title="Timer wegklikken" hidden>✕</button></span>
+    <span id="cnt"></span></div><div id="grid"></div>`;
   const grid = $('#grid');
+  // Afschermen: tijdens de timer altijd, na de timer nooit, anders volgens de knop
+  const running = () => timerEnd !== null && nowS() < timerEnd;
+  const eff = () => timerEnd !== null ? running() : st.shield;
+
   // Vergroten van een wisbordje (blijft live meebewegen)
   let zoomId = null;
   const zoom = document.createElement('div'); zoom.id = 'zoom'; zoom.hidden = true;
@@ -320,15 +376,15 @@ async function teacher(code) {
     zoom.querySelector('.zn').textContent = st.hide ? '' : u.name;
     draw(zcv, { s: [], t: [], ...u.data }, 1600);
   };
-  const openZoom = id => { if (st.shield) return; zoomId = id; zoom.hidden = false; zdraw(); };
+  const openZoom = id => { if (eff()) return; zoomId = id; zoom.hidden = false; zdraw(); };
   zoom.onclick = e => { if (e.target === zoom || e.target.classList.contains('zx')) closeZoom(); };
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeZoom(); });
 
   const ui = () => {
-    if (zoomId) { if (st.shield) closeZoom(); else zdraw(); }
-    grid.classList.toggle('hide', st.hide); grid.classList.toggle('shield', st.shield);
+    if (zoomId) { if (eff()) closeZoom(); else zdraw(); }
+    grid.classList.toggle('hide', st.hide); grid.classList.toggle('shield', eff());
     $('#h').classList.toggle('on', st.hide); $('#h').textContent = st.hide ? 'Namen tonen' : 'Namen verbergen';
-    $('#sh').classList.toggle('on', st.shield); $('#sh').textContent = st.shield ? 'Wisbordjes tonen' : 'Wisbordjes afschermen';
+    $('#sh').classList.toggle('on', st.shield); $('#sh').disabled = timerEnd !== null; $('#sh').textContent = st.shield ? 'Wisbordjes tonen' : 'Wisbordjes afschermen';
     $('#cl').classList.toggle('on', st.closed); $('#cl').textContent = st.closed ? 'Sessie openen' : 'Sessie sluiten';
     const n = Object.keys(users).length; $('#cnt').textContent = n + ' leerling' + (n === 1 ? '' : 'en');
   };
@@ -368,6 +424,38 @@ async function teacher(code) {
     if (el._ts !== u.ts) { el._ts = u.ts; draw(el.querySelector('canvas'), { s: [], t: [], ...u.data }, 400); }
   }
   const setU = r => { users[r.student] = { name: r.name, data: r.data, ts: r.updated_at }; upd(r.student); if (zoomId === r.student) zdraw(); ui(); };
+
+  // Timer
+  let wasRun = running();
+  const beep = () => {
+    try {
+      const a = new (window.AudioContext || window.webkitAudioContext)(), o = a.createOscillator(), g = a.createGain();
+      o.connect(g); g.connect(a.destination); o.frequency.value = 880;
+      g.gain.setValueAtTime(.2, a.currentTime); g.gain.exponentialRampToValueAtTime(.001, a.currentTime + 1.2);
+      o.start(); o.stop(a.currentTime + 1.2);
+    } catch {}
+  };
+  const tui = () => {
+    const left = timerEnd === null ? null : timerEnd - nowS(), pill = $('#tpill');
+    pill.hidden = $('#tx').hidden = left === null;
+    pill.classList.toggle('done', left !== null && left <= 0);
+    if (left !== null) pill.textContent = left > 0 ? '⏱ ' + fmt(left) : '⏱ Tijd is om!';
+    $('#tgo').textContent = left === null ? '⏱ Start timer' : '↻ Opnieuw starten';
+    const run = left !== null && left > 0;
+    if (run !== wasRun) { wasRun = run; if (!run && left !== null) beep(); ui(); }
+  };
+  $('#tgo').onclick = async () => {
+    const min = Math.min(180, Math.max(.5, parseFloat($('#tmin').value) || 5));
+    ls.s('wb_tmin', min);
+    const { data, error } = await sb.rpc('start_timer', { p_code: code, p_seconds: Math.round(min * 60) });
+    if (error || !data) return alert('Timer starten mislukt. Is update-timer.sql uitgevoerd in Supabase? ' + (error ? error.message : ''));
+    timerEnd = Date.parse(data); ui(); tui();
+  };
+  $('#tx').onclick = async () => { // timer wegklikken: leerlingen kunnen weer tekenen
+    await sb.from('sessions').update({ timer_end: null }).eq('code', code);
+    timerEnd = null; wasRun = false; ui(); tui();
+  };
+  setInterval(tui, 300);
 
   const { data: rows } = await sb.from('boards').select('student,name,data,updated_at').eq('code', code);
   (rows || []).forEach(setU);
