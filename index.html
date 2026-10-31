@@ -5,47 +5,78 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Wisbordjes</title>
 <style>
-:root{--bg:#f4f5f7;--fg:#1f2430;--card:#fff;--bd:#d9dce3;--ac:#2563eb;--red:#dc2626}
-@media(prefers-color-scheme:dark){:root{--bg:#171a21;--fg:#e8eaf0;--card:#232733;--bd:#3a4050}}
+:root{--ink:#1f2340;--mute:#6b6f92;--primary:#5458d6;--primary-d:#4246b8;--coral:#ff6a55;--pink:#ff9aa8;--yellow:#ffc93c;--blue:#5b94c8;--green:#14b789;--violet:#a78bfa;--lav:#cfc6f7;--line:#e6e2f4;--red:#ff4d4f;--sh:0 10px 30px rgba(60,50,120,.15);color-scheme:light}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%}
-body{font:16px system-ui,sans-serif;background:var(--bg);color:var(--fg)}
-button,input,select{font:inherit;color:inherit;background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:8px 12px}
-button{cursor:pointer}
-button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
-a{color:var(--ac)}
-.c{max-width:520px;margin:0 auto;padding:24px 16px}
-.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin:16px 0;display:flex;flex-direction:column;gap:10px}
-.card h2{margin:0}
-.row{display:flex;gap:8px;align-items:center}.row input{flex:1}
-.item{display:flex;justify-content:space-between;align-items:center;gap:8px}
-/* leerling */
-.st{height:100dvh;display:flex;flex-direction:column}
-.bar{display:flex;gap:6px;align-items:center;padding:8px;flex-wrap:wrap;background:var(--card);border-bottom:1px solid var(--bd)}
-.bar input[type=color]{padding:0;width:40px;height:38px}
-.bar .sp{flex:1}
-#wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:8px}
-#box{position:relative;box-shadow:0 2px 12px #0003}
-#cv{display:block;background:#fff;touch-action:none;cursor:crosshair}
-#box textarea{position:absolute;margin:0;padding:0;border:1px dashed #888;background:#fff8;color:#000;resize:none;outline:none;overflow:hidden;font-family:sans-serif;line-height:1.2}
+html,body{margin:0;min-height:100%}
+body{font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:
+ radial-gradient(circle 17vmin at 0 100%,var(--violet) 99%,transparent 100%),
+ radial-gradient(circle 40vmin at 0 0,var(--blue) 99%,transparent 100%),
+ radial-gradient(circle 42vmin at 100% 0,var(--coral) 99%,transparent 100%),
+ radial-gradient(circle 40vmin at 0 100%,var(--pink) 99%,transparent 100%),
+ radial-gradient(circle 40vmin at 100% 100%,var(--yellow) 99%,transparent 100%),
+ #f4f1fe;background-attachment:fixed}
 [hidden]{display:none!important}
-#msg{position:fixed;inset:0;background:#000b;color:#fff;display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;text-align:center;padding:24px;font-size:20px}
+button,input,select{font:inherit;color:inherit}
+input,select{background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:9px 14px;outline:none}
+input:focus,select:focus{border-color:var(--primary);box-shadow:0 0 0 3px #5458d633}
+button{cursor:pointer;background:#fff;border:1.5px solid var(--line);border-radius:999px;padding:8px 16px;font-weight:600;transition:background .15s,box-shadow .15s}
+button:hover{background:#f1eeff;border-color:var(--lav)}
+button.on{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:0 4px 12px #5458d655}
+button.on:hover{background:var(--primary-d)}
+button#go,button#new{background:var(--green);border-color:var(--green);color:#fff;box-shadow:0 4px 12px #14b78955}
+button#go:hover,button#new:hover{background:#0fa377}
+#cl.on{background:var(--coral);border-color:var(--coral);box-shadow:0 4px 12px #ff6a5555}
+#cl.on:hover{background:#f0553f}
+a{color:var(--primary);font-weight:600;text-decoration:none}
+a:hover{text-decoration:underline}
+/* startpagina */
+.c{max-width:520px;margin:0 auto;padding:32px 16px}
+.c h1{text-align:center;margin:8px 0 0;font-size:2rem}
+.card{background:#fff;border-radius:20px;padding:20px;margin:18px 0;display:flex;flex-direction:column;gap:12px;box-shadow:var(--sh)}
+.card h2{margin:0;font-size:1.15rem}
+.row{display:flex;gap:8px;align-items:center}.row input{flex:1}
+.item{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;background:#f7f5ff}
+/* leerling */
+.st{height:100dvh;display:flex;flex-direction:column;padding:12px;gap:12px}
+.bar{display:flex;gap:8px;align-items:center;padding:10px 14px;flex-wrap:wrap;background:#fff;border-radius:18px;box-shadow:var(--sh)}
+.bar .sp{flex:1}
+.bar select{border-radius:999px;padding:8px 14px;font-weight:600}
+.bar small{color:var(--mute);font-weight:600}
+.sws{display:flex;gap:6px;align-items:center;padding:0 4px}
+.sw{width:26px;height:26px;border-radius:50%;padding:0;border:2px solid #fff;box-shadow:0 0 0 1.5px var(--line)}
+.sw:hover{border-color:#fff;transform:scale(1.12)}
+.sw.sel{box-shadow:0 0 0 2.5px var(--primary)}
+.sw.plus{display:inline-flex;align-items:center;justify-content:center;background:var(--primary);color:#fff;font-weight:700;position:relative;overflow:hidden;cursor:pointer}
+.sw.plus input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;padding:0;border:0}
+#wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+#box{position:relative;border-radius:18px;overflow:hidden;background:#fff;box-shadow:0 14px 40px rgba(60,50,120,.25)}
+#cv{display:block;background:#fff;touch-action:none;cursor:crosshair}
+#box textarea{position:absolute;margin:0;padding:0;border:1.5px dashed var(--primary);background:#fff8;color:#000;resize:none;outline:none;overflow:hidden;font-family:sans-serif;line-height:1.2}
+#msg{position:fixed;inset:0;background:rgba(84,88,214,.94);color:#fff;display:flex;flex-direction:column;gap:16px;align-items:center;justify-content:center;text-align:center;padding:24px;font-size:1.3rem;font-weight:600;z-index:20}
+#msg button{color:var(--primary)}
 /* docent */
-.tb{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 12px;background:var(--card);border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:5}
-.code{font-weight:700;font-size:1.2em;letter-spacing:.1em;background:var(--bg);padding:4px 10px;border-radius:8px}
-#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;padding:12px}
-.cd{position:relative;background:var(--card);border:1px solid var(--bd);border-radius:10px;overflow:hidden}
+.tb{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 16px;margin:12px;background:#fff;border-radius:18px;box-shadow:var(--sh)}
+.tb b{font-size:1.1rem}
+.code{font-weight:800;letter-spacing:.12em;background:var(--coral);color:#fff;padding:4px 12px;border-radius:8px}
+#cnt{margin-left:auto;color:var(--mute);font-weight:600}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;padding:4px 12px 16px}
+.cd{position:relative;background:#fff;border-radius:18px;overflow:hidden;box-shadow:var(--sh)}
 .cd canvas{display:block;width:100%;background:#fff}
-.cd .ft{display:flex;justify-content:space-between;align-items:center;padding:6px 8px;gap:6px}
-.cd .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cd .x{padding:2px 8px}
+.cd .ft{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;gap:6px}
+.cd .nm{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cd .bt{display:flex;gap:4px}
+.cd .bt button{padding:4px 10px}
 .cd.off canvas{opacity:.35}
-.warn{position:absolute;top:8px;right:8px;width:32px;height:32px;border-radius:50%;background:var(--red);color:#fff;font-weight:800;font-size:20px;display:none;align-items:center;justify-content:center}
+.warn{position:absolute;top:10px;right:10px;width:32px;height:32px;border-radius:50%;background:var(--red);color:#fff;font-weight:800;font-size:20px;box-shadow:0 2px 8px #ff4d4f77;display:none;align-items:center;justify-content:center}
 .cd.away .warn{display:flex}
 .hide .nm{visibility:hidden}
 .shield canvas{visibility:hidden}
-.shield .cd{min-height:150px}
-.shield .cd::after{content:"Afgeschermd";position:absolute;top:40%;left:0;right:0;text-align:center;opacity:.6}
+.shield .cd{min-height:160px;background:linear-gradient(135deg,#efeaff,#ffeef0)}
+.shield .cd::after{content:"Afgeschermd";position:absolute;top:38%;left:0;right:0;text-align:center;color:var(--mute);font-weight:700}
+#zoom{position:fixed;inset:0;background:rgba(31,35,64,.82);z-index:30;display:flex;align-items:center;justify-content:center;padding:16px}
+#zoom .zb{display:flex;flex-direction:column;gap:10px}
+#zoom .zh{display:flex;justify-content:space-between;align-items:center;color:#fff;font-size:1.1em;min-height:38px}
+#zoom canvas{width:min(92vw,calc((100dvh - 110px) * 1.7142857));height:auto;background:#fff;border-radius:16px;box-shadow:0 20px 60px #0006}
 </style>
 </head>
 <body>
@@ -151,13 +182,14 @@ async function student(code) {
     return;
   }
   const b = ls.g('wb_board_' + code) || { s: [], t: [] };
-  let tool = 'pen', color = '#111111', sz = 6, cur = null, timer = 0, sc = 1, raf = 0;
+  const SW = ['#1f2340', '#ff6a55', '#ffc93c', '#14b789', '#5b94c8', '#7c5cf0'];
+  let tool = 'pen', color = SW[0], sz = 6, cur = null, timer = 0, sc = 1, raf = 0;
   let blocked = true, wr = false, pend = false, joined = false;
 
   app.innerHTML = `<div class="st"><div class="bar">
     <button data-t="pen" class="on">✏️ Pen</button><button data-t="hl">🖍️ Marker</button>
     <button data-t="er">🧽 Gum</button><button data-t="tx">🔤 Tekst</button>
-    <input type="color" id="col" value="#111111">
+    <span class="sws">${SW.map((c, i) => `<button class="sw${i ? '' : ' sel'}" data-c="${c}" style="background:${c}" title="Kleur"></button>`).join('')}<label class="sw plus" title="Eigen kleur">+<input type="color" id="col" value="#1f2340"></label></span>
     <select id="sz"><option value="3">Dun</option><option value="6" selected>Middel</option><option value="12">Dik</option></select>
     <button id="undo">↶</button><button id="clr">Alles wissen</button>
     <span class="sp"></span><small>${esc(name)} · ${esc(code)}</small></div>
@@ -188,28 +220,42 @@ async function student(code) {
   // Aanwezigheid: tabblad verlaten zien docenten als uitroepteken
   const ch = sb.channel('wb:' + code, { config: { presence: { key: uid } } });
   const away = () => document.hidden || !document.hasFocus();
-  const chk = () => joined && ch.track({ name, away: away() });
-  document.addEventListener('visibilitychange', chk); addEventListener('blur', chk); addEventListener('focus', chk); addEventListener('pagehide', () => joined && ch.track({ name, away: true }));
+  const chk = () => joined && !blocked && ch.track({ name, away: away() });
+  document.addEventListener('visibilitychange', chk); addEventListener('blur', chk); addEventListener('focus', chk); addEventListener('pagehide', () => joined && !blocked && ch.track({ name, away: true }));
 
   // Toegang controleren
   const { data: ses } = await sb.from('sessions').select('code,closed').eq('code', code).maybeSingle();
   if (!ses) return setBlock('Deze sessie bestaat niet (of de verbinding mislukte).', true);
   const { data: kk } = await sb.from('kicked').select('student').eq('code', code).eq('student', uid).maybeSingle();
-  if (kk) return setBlock(KICK);
   const { data: own } = await sb.from('boards').select('data').eq('code', code).eq('student', uid).maybeSingle();
-  if (!own) {
-    if (ses.closed) return setBlock('De sessie is gesloten voor nieuwe leerlingen.', true);
-    const { error } = await sb.from('boards').insert({ code, student: uid, name, data: b });
-    if (error) return setBlock('Meedoen mislukt: ' + error.message, true);
-  } else if (!b.s.length && !b.t.length && own.data) { // lokaal leeg (bv. andere browser): haal serverbord op
+  let closed = ses.closed, kicked = !!kk, hasBoard = !!own;
+  if (own && !b.s.length && !b.t.length && own.data) { // lokaal leeg (bv. andere browser): haal serverbord op
     Object.assign(b, own.data); b.s = b.s || []; b.t = b.t || []; redraw();
   }
-  setBlock(null);
-  if (own) write();
+
+  // Bepaalt of de leerling mag tekenen; wordt aangeroepen bij elke wijziging van de sessie
+  const apply = async () => {
+    if (kicked) { setBlock(KICK); if (joined) ch.untrack(); return; }
+    if (closed) { setBlock('De docent heeft de sessie gesloten. Je kunt niet meer tekenen.'); if (joined) ch.untrack(); return; }
+    if (!hasBoard) {
+      const { error } = await sb.from('boards').insert({ code, student: uid, name, data: b });
+      if (error) return setBlock('Meedoen mislukt: ' + error.message, true);
+      hasBoard = true;
+    }
+    setBlock(null); chk(); write();
+  };
 
   ch.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'kicked', filter: 'code=eq.' + code },
-    p => { if (p.new.student === uid) setBlock(KICK); })
+      p => { if (p.new.student === uid) { kicked = true; apply(); } })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sessions', filter: 'code=eq.' + code },
+      p => { closed = !!p.new.closed; apply(); })
     .subscribe(s => { if (s === 'SUBSCRIBED') { joined = true; chk(); } });
+  apply();
+  // vangnet: ook als een realtime-bericht gemist wordt, volgt de status binnen 10 seconden
+  setInterval(async () => {
+    const { data } = await sb.from('sessions').select('closed').eq('code', code).maybeSingle();
+    if (data && data.closed !== closed) { closed = data.closed; apply(); }
+  }, 10000);
 
   const pos = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W | 0, (e.clientY - r.top) / r.height * H | 0]; };
   cv.onpointerdown = e => {
@@ -243,7 +289,9 @@ async function student(code) {
     document.querySelectorAll('[data-t]').forEach(o => o.classList.toggle('on', o === btn));
     cv.style.cursor = tool === 'tx' ? 'text' : 'crosshair';
   });
-  $('#col').oninput = e => color = e.target.value;
+  const sels = () => document.querySelectorAll('.sw[data-c]');
+  sels().forEach(btn => btn.onclick = () => { color = btn.dataset.c; sels().forEach(o => o.classList.toggle('sel', o === btn)); });
+  $('#col').oninput = e => { color = e.target.value; sels().forEach(o => o.classList.remove('sel')); };
   $('#sz').onchange = e => sz = +e.target.value;
   $('#undo').onclick = () => { (b.s.length ? b.s : b.t).pop(); redraw(); save(); };
   $('#clr').onclick = () => { if (confirm('Je hele wisbordje wissen?')) { b.s.length = 0; b.t.length = 0; redraw(); save(); } };
@@ -260,7 +308,24 @@ async function teacher(code) {
     <span class="code">${code}</span><button id="cp">Link kopiëren</button>
     <button id="h"></button><button id="sh"></button><button id="cl"></button><span id="cnt"></span></div><div id="grid"></div>`;
   const grid = $('#grid');
+  // Vergroten van een wisbordje (blijft live meebewegen)
+  let zoomId = null;
+  const zoom = document.createElement('div'); zoom.id = 'zoom'; zoom.hidden = true;
+  zoom.innerHTML = '<div class="zb"><div class="zh"><b class="zn"></b><button class="zx">✕ Sluiten</button></div><canvas></canvas></div>';
+  document.body.append(zoom);
+  const zcv = zoom.querySelector('canvas');
+  const closeZoom = () => { zoomId = null; zoom.hidden = true; };
+  const zdraw = () => {
+    const u = users[zoomId]; if (!u) return closeZoom();
+    zoom.querySelector('.zn').textContent = st.hide ? '' : u.name;
+    draw(zcv, { s: [], t: [], ...u.data }, 1600);
+  };
+  const openZoom = id => { if (st.shield) return; zoomId = id; zoom.hidden = false; zdraw(); };
+  zoom.onclick = e => { if (e.target === zoom || e.target.classList.contains('zx')) closeZoom(); };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeZoom(); });
+
   const ui = () => {
+    if (zoomId) { if (st.shield) closeZoom(); else zdraw(); }
     grid.classList.toggle('hide', st.hide); grid.classList.toggle('shield', st.shield);
     $('#h').classList.toggle('on', st.hide); $('#h').textContent = st.hide ? 'Namen tonen' : 'Namen verbergen';
     $('#sh').classList.toggle('on', st.shield); $('#sh').textContent = st.shield ? 'Wisbordjes tonen' : 'Wisbordjes afschermen';
@@ -270,25 +335,29 @@ async function teacher(code) {
   const push = () => { sb.from('sessions').update(st).eq('code', code).then(() => {}); ui(); };
   $('#h').onclick = () => { st.hide = !st.hide; push(); };
   $('#sh').onclick = () => { st.shield = !st.shield; push(); };
-  $('#cl').onclick = () => { st.closed = !st.closed; push(); };
+  $('#cl').onclick = () => {
+    if (!st.closed && !confirm('Sessie sluiten? Alle leerlingen worden meteen losgekoppeld en kunnen niet meer tekenen.')) return;
+    st.closed = !st.closed; push();
+  };
   $('#cp').onclick = () => {
     try { navigator.clipboard.writeText(location.origin + location.pathname + '?s=' + code); } catch {}
     $('#cp').textContent = 'Gekopieerd!'; setTimeout(() => $('#cp').textContent = 'Link kopiëren', 1500);
   };
 
-  const drop = id => { delete users[id]; els[id] && els[id].remove(); delete els[id]; ui(); };
+  const drop = id => { if (zoomId === id) closeZoom(); delete users[id]; els[id] && els[id].remove(); delete els[id]; ui(); };
   function upd(id) {
     const u = users[id]; if (!u) return;
     let el = els[id];
     if (!el) {
       el = els[id] = document.createElement('div'); el.className = 'cd';
-      el.innerHTML = '<canvas></canvas><div class="warn">!</div><div class="ft"><span class="nm"></span><button class="x" title="Verwijder leerling">✕</button></div>';
+      el.innerHTML = '<canvas></canvas><div class="warn">!</div><div class="ft"><span class="nm"></span><span class="bt"><button class="z" title="Vergroten">🔍</button><button class="x" title="Verwijder leerling">✕</button></span></div>';
       el.querySelector('.x').onclick = async () => {
         if (!confirm(users[id].name + ' verwijderen uit de sessie?')) return;
         await sb.from('kicked').insert({ code, student: id });
         await sb.from('boards').delete().eq('code', code).eq('student', id);
         drop(id);
       };
+      el.querySelector('.z').onclick = () => openZoom(id);
       grid.append(el);
     }
     const o = online[id];
@@ -298,7 +367,7 @@ async function teacher(code) {
     el.querySelector('.warn').title = o ? 'Leerling heeft het tabblad verlaten' : 'Leerling is offline';
     if (el._ts !== u.ts) { el._ts = u.ts; draw(el.querySelector('canvas'), { s: [], t: [], ...u.data }, 400); }
   }
-  const setU = r => { users[r.student] = { name: r.name, data: r.data, ts: r.updated_at }; upd(r.student); ui(); };
+  const setU = r => { users[r.student] = { name: r.name, data: r.data, ts: r.updated_at }; upd(r.student); if (zoomId === r.student) zdraw(); ui(); };
 
   const { data: rows } = await sb.from('boards').select('student,name,data,updated_at').eq('code', code);
   (rows || []).forEach(setU);
