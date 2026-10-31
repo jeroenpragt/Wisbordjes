@@ -50,8 +50,8 @@ a:hover{text-decoration:underline}
 .sw.sel{box-shadow:0 0 0 2.5px var(--primary)}
 .sw.plus{display:inline-flex;align-items:center;justify-content:center;background:var(--primary);color:#fff;font-weight:700;position:relative;overflow:hidden;cursor:pointer}
 .sw.plus input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;padding:0;border:0}
-#wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
-#box{position:relative;border-radius:18px;overflow:hidden;background:#fff;box-shadow:0 14px 40px rgba(60,50,120,.25)}
+#wrap{flex:1;min-height:0;display:flex;overflow:auto}
+#box{margin:auto;flex:none;position:relative;border-radius:18px;overflow:hidden;background:#fff;box-shadow:0 14px 40px rgba(60,50,120,.25)}
 #cv{display:block;background:#fff;touch-action:none;cursor:crosshair}
 #box textarea{position:absolute;margin:0;padding:0;border:1.5px dashed var(--primary);background:#fff8;color:#000;resize:none;outline:none;overflow:hidden;font-family:sans-serif;line-height:1.2}
 #msg{position:fixed;inset:0;background:rgba(84,88,214,.94);color:#fff;display:flex;flex-direction:column;gap:16px;align-items:center;justify-content:center;text-align:center;padding:24px;font-size:1.3rem;font-weight:600;z-index:20}
@@ -73,7 +73,7 @@ a:hover{text-decoration:underline}
 .tpill.done{background:var(--coral);color:#fff}
 .tm{display:flex;gap:6px;align-items:center}
 #tmin{width:84px;padding:8px 10px}
-.st.locked .bar button:not(#fs),.st.locked .bar select,.st.locked .bar .sw{opacity:.4;pointer-events:none}
+.st.locked .bar button:not(#fs):not(.keep),.st.locked .bar select,.st.locked .bar .sw{opacity:.4;pointer-events:none}
 .st.locked #cv{cursor:not-allowed}
 .warn{position:absolute;top:10px;right:10px;width:32px;height:32px;border-radius:50%;background:var(--red);color:#fff;font-weight:800;font-size:20px;box-shadow:0 2px 8px #ff4d4f77;display:none;align-items:center;justify-content:center}
 .cd.away .warn{display:flex}
@@ -85,7 +85,29 @@ a:hover{text-decoration:underline}
 #zoom .zb{display:flex;flex-direction:column;gap:10px}
 #zoom .zh{display:flex;justify-content:space-between;align-items:center;color:#fff;font-size:1.1em;min-height:38px}
 #zoom .zx{color:var(--ink)}
-#zoom canvas{width:min(92vw,calc((100dvh - 110px) * 1.7142857));height:auto;background:#fff;border-radius:16px;box-shadow:0 20px 60px #0006}
+#zoom canvas{width:min(92vw,calc((100dvh - 110px) * 1.6));height:auto;background:#fff;border-radius:16px;box-shadow:0 20px 60px #0006}
+#set{position:fixed;inset:0;background:rgba(31,35,64,.82);z-index:30;display:flex;align-items:center;justify-content:center;padding:16px}
+#set .sb{background:#fff;border-radius:20px;padding:20px;width:min(780px,100%);max-height:92vh;overflow:auto;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 60px #0006}
+#set .sh{display:flex;justify-content:space-between;align-items:center;font-size:1.2rem}
+#set h3{margin:8px 0 0}
+.pills{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.filebtn{cursor:pointer;background:#fff;border:1.5px solid var(--line);border-radius:999px;padding:8px 16px;font-weight:600}
+.filebtn:hover{background:#f1eeff}
+.filebtn.on{background:var(--primary);border-color:var(--primary);color:#fff}
+#bgprev{width:min(560px,100%);aspect-ratio:12/7;background:#fff;border:1.5px solid var(--line);border-radius:12px;touch-action:none;cursor:grab}
+.gc{border:1.5px dashed var(--lav);border-radius:14px;padding:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:52px;cursor:pointer}
+.gc b{margin-right:8px}
+.gc>i{margin-left:auto;font-style:normal}
+.bdg{display:inline-flex;align-items:center;gap:6px;background:#efeaff;color:var(--ink);border-radius:999px;padding:3px 10px;font-weight:600;font-size:.9rem}
+.bdg.me{background:var(--primary);color:#fff}
+.bdg.pick{outline:3px solid var(--yellow)}
+.bdg.off{opacity:.45}
+.bdg.away{background:#ffe3e0;color:#b3261e}
+.bdg i{font-style:normal;opacity:.6}
+.chips{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.zm{display:flex;gap:4px}
+.cd .bdgs{display:flex;gap:6px;flex-wrap:wrap;padding:0 12px 12px}
+.hide .bn{visibility:hidden}
 </style>
 </head>
 <body>
@@ -102,27 +124,87 @@ const rnd = n => Array.from({ length: n }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ234567
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // Tekent een bord (strokes + teksten) op een canvas met pixelbreedte w
-function draw(cv, b, w) {
-  const sc = w / W; cv.width = w; cv.height = Math.round(H * sc);
-  const x = cv.getContext('2d');
-  x.fillStyle = '#fff'; x.fillRect(0, 0, cv.width, cv.height);
-  x.scale(sc, sc); x.lineCap = x.lineJoin = 'round';
-  for (const s of b.s) {
-    const hl = s.m === 'hl', p = s.p;
-    x.globalCompositeOperation = hl ? 'multiply' : 'source-over';
-    x.globalAlpha = hl ? .4 : 1;
-    x.strokeStyle = s.m === 'er' ? '#fff' : s.c; x.lineWidth = s.w;
+// ---------- Tekenen: achtergrond + lagen (elke leerling heeft een eigen laag) ----------
+const DIM = { individual: [1200, 700], groups: [2400, 1400], placemat: [1600, 1000] }; // logische bordgrootte per werkvorm
+const ZORD = [0, 2, 1, 3];                 // placemat: vak per groepslid = boven, onder, rechts, links
+const ZNAME = ['boven', 'rechts', 'onder', 'links'];
+const ENV = { dm: DIM.individual, bg: { type: 'white' }, img: null };
+const matGeom = (w, h) => ({ cx: w / 2, cy: h / 2, rw: w * .15, rh: h * .15 });
+function zonePoly(i, w, h) {
+  const { cx, cy, rw, rh } = matGeom(w, h);
+  return [[[0, 0], [w, 0], [cx + rw, cy - rh], [cx - rw, cy - rh]], [[w, 0], [w, h], [cx + rw, cy + rh], [cx + rw, cy - rh]],
+          [[0, h], [w, h], [cx + rw, cy + rh], [cx - rw, cy + rh]], [[0, 0], [0, h], [cx - rw, cy + rh], [cx - rw, cy - rh]]][i];
+}
+function zoneAt(x, y, w, h) {
+  const { cx, cy, rw, rh } = matGeom(w, h);
+  if (Math.abs(x - cx) <= rw && Math.abs(y - cy) <= rh) return 'c';
+  const dx = (x - cx) / (w / 2), dy = (y - cy) / (h / 2);
+  return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy < 0 ? 0 : 2);
+}
+function bgDraw(x, o) {
+  const [w, h] = o.dm, b = o.bg || {};
+  x.lineWidth = 1.5; x.strokeStyle = '#c9d3ee'; x.fillStyle = '#b4bde0';
+  if (b.type === 'lines') for (let y = 80; y < h; y += 40) { x.beginPath(); x.moveTo(0, y); x.lineTo(w, y); x.stroke(); }
+  if (b.type === 'grid') { x.beginPath(); for (let i = 40; i < w; i += 40) { x.moveTo(i, 0); x.lineTo(i, h); } for (let j = 40; j < h; j += 40) { x.moveTo(0, j); x.lineTo(w, j); } x.stroke(); }
+  if (b.type === 'dots') for (let i = 40; i < w; i += 40) for (let j = 40; j < h; j += 40) { x.beginPath(); x.arc(i, j, 2.4, 0, 7); x.fill(); }
+  if (b.type === 'image' && o.img) {
+    const k = Math.max(w / o.img.width, h / o.img.height) * (b.z || 1), iw = o.img.width * k, ih = o.img.height * k;
+    x.drawImage(o.img, (w - iw) / 2 + (b.x || 0) * w, (h - ih) / 2 + (b.y || 0) * h, iw, ih);
+  }
+  if (o.mat) {
+    const { cx, cy, rw, rh } = matGeom(w, h);
+    x.fillStyle = 'rgba(255,201,60,.16)'; x.fillRect(cx - rw, cy - rh, rw * 2, rh * 2);
+    x.strokeStyle = '#7c6fd6'; x.lineWidth = 4; x.strokeRect(cx - rw, cy - rh, rw * 2, rh * 2);
+    x.beginPath(); [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([p, q]) => { x.moveTo(cx + p * rw, cy + q * rh); x.lineTo(cx + p * cx, cy + q * cy); }); x.stroke();
+    x.fillStyle = 'rgba(70,70,130,.5)'; x.font = '700 34px system-ui,sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText('Samen', cx, cy);
+    const nm = o.names || [];
+    if (nm[0]) x.fillText(nm[0], cx, (cy - rh) / 2);
+    if (nm[1]) x.fillText(nm[1], w - (cx - rw) / 2, cy);
+    if (nm[2]) x.fillText(nm[2], cx, h - (cy - rh) / 2);
+    if (nm[3]) x.fillText(nm[3], (cx - rw) / 2, cy);
+  }
+}
+function strokes(x, b) {
+  x.lineCap = x.lineJoin = 'round';
+  for (const s of b.s || []) {
+    const p = s.p;
+    x.globalCompositeOperation = s.m === 'er' ? 'destination-out' : 'source-over'; // gum wist alleen de eigen laag
+    x.globalAlpha = s.m === 'hl' ? .4 : 1; x.strokeStyle = s.c; x.lineWidth = s.w;
     x.beginPath(); x.moveTo(p[0], p[1]);
     if (p.length < 4) x.lineTo(p[0] + .1, p[1]);
     for (let i = 2; i < p.length; i += 2) x.lineTo(p[i], p[i + 1]);
     x.stroke();
   }
   x.globalAlpha = 1; x.globalCompositeOperation = 'source-over';
-  for (const t of b.t) {
-    x.fillStyle = t.c; x.font = t.s + 'px sans-serif'; x.textBaseline = 'top';
+  for (const t of b.t || []) {
+    x.fillStyle = t.c; x.font = t.s + 'px sans-serif'; x.textBaseline = 'top'; x.textAlign = 'start';
     t.v.split('\n').forEach((l, i) => x.fillText(l, t.x, t.y + i * t.s * 1.2));
   }
 }
+const OFF = document.createElement('canvas');
+// o = { dm, bg, img, mat, names, layers: [{ data, zone, center }] }
+function render(cv, pw, o) {
+  const [w, h] = o.dm, sc = pw / w;
+  cv.width = pw; cv.height = Math.round(h * sc);
+  const x = cv.getContext('2d');
+  x.fillStyle = '#fff'; x.fillRect(0, 0, cv.width, cv.height);
+  x.save(); x.scale(sc, sc); bgDraw(x, o); x.restore();
+  OFF.width = cv.width; OFF.height = cv.height;
+  const y = OFF.getContext('2d');
+  for (const L of o.layers) {
+    y.setTransform(1, 0, 0, 1, 0, 0); y.clearRect(0, 0, OFF.width, OFF.height);
+    y.save(); y.scale(sc, sc);
+    if (L.zone != null) { // placemat: een laag blijft binnen het eigen vak (en het midden als dat vrij is)
+      y.beginPath(); zonePoly(L.zone, w, h).forEach(([a, c], i) => i ? y.lineTo(a, c) : y.moveTo(a, c)); y.closePath();
+      if (L.center) { const g = matGeom(w, h); y.rect(g.cx - g.rw, g.cy - g.rh, g.rw * 2, g.rh * 2); }
+      y.clip();
+    }
+    strokes(y, L.data || {}); y.restore();
+    x.drawImage(OFF, 0, 0);
+  }
+}
+const draw = (cv, b, w) => render(cv, w, { dm: ENV.dm, bg: ENV.bg, img: ENV.img, layers: [{ data: b }] });
 
 // ====== INSTELLEN: kopieer deze twee waarden uit Supabase (Project Settings > API) ======
 const SUPABASE_URL = 'https://mrntifcakwmwdlywaqgt.supabase.co';
@@ -202,15 +284,17 @@ async function student(code) {
   const b = ls.g('wb_board_' + code) || { s: [], t: [] };
   const SW = ['#1f2340', '#ff6a55', '#ffc93c', '#14b789', '#5b94c8', '#7c5cf0'];
   let tool = 'pen', color = SW[0], sz = 6, cur = null, timer = 0, sc = 1, raf = 0;
+  let others = {}, sess = null, mode = 'individual', myG = null, myZone = null, z = 1, waiting = false, panning = null;
   let blocked = true, wr = false, pend = false, joined = false, locked = false, timerEnd = null, frozen = false;
 
   app.innerHTML = `<div class="st"><div class="bar">
     <button data-t="pen" class="on">✏️ Pen</button><button data-t="hl">🖍️ Marker</button>
-    <button data-t="er">🧽 Gum</button><button data-t="tx">🔤 Tekst</button>
+    <button data-t="er">🧽 Gum</button><button data-t="tx">🔤 Tekst</button><button data-t="pan" id="panb" class="keep" hidden title="Verschuiven">✋</button>
+    <span class="zm" id="zm" hidden><button class="keep" id="zo" title="Uitzoomen">−</button><button class="keep" id="zf" title="Passend">⊡</button><button class="keep" id="zi" title="Inzoomen">+</button></span>
     <span class="sws">${SW.map((c, i) => `<button class="sw${i ? '' : ' sel'}" data-c="${c}" style="background:${c}" title="Kleur"></button>`).join('')}<label class="sw plus" title="Eigen kleur">+<input type="color" id="col" value="#1f2340"></label></span>
     <select id="sz"><option value="3">Dun</option><option value="6" selected>Middel</option><option value="12">Dik</option></select>
     <button id="undo">↶</button><button id="clr">Alles wissen</button>
-    <span id="tpill" class="tpill" hidden></span>
+    <span id="tpill" class="tpill" hidden></span><span id="grp" class="chips" hidden></span>
     <span class="sp"></span><small>${esc(name)} · ${esc(code)}</small><button id="fs">⛶ Volledig scherm</button></div>
     <div id="wrap"><div id="box"><canvas id="cv"></canvas></div></div></div>
     <div id="msg">Verbinden…</div>`;
@@ -229,10 +313,19 @@ async function student(code) {
     wr = false; if (pend) { pend = false; write(); }
   };
   const save = () => { ls.s('wb_board_' + code, b); clearTimeout(timer); timer = setTimeout(write, 600); };
-  const redraw = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => draw(cv, b, cv.clientWidth * (devicePixelRatio || 1) | 0)); };
+  // Alle lagen van de groep (eigen laag live), gesorteerd zodat iedereen dezelfde stapeling ziet
+  const layerList = () => Object.entries(others).map(([id, o]) => [id, o.data]).concat([[uid, b]]).sort((p, q) => p[0] < q[0] ? -1 : 1)
+    .map(([id, d]) => mode === 'placemat' && myG
+      ? { data: d, zone: ZORD[Math.max(0, myG.members.findIndex(m => m.id === id))], center: !!(sess && sess.reveal) } : { data: d });
+  const matNames = () => { const n = []; if (myG) myG.members.forEach((m, i) => { n[ZORD[i]] = m.name; }); return n; };
+  const redraw = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => render(cv, Math.min(4096, cv.clientWidth * (devicePixelRatio || 1) | 0),
+    { dm: ENV.dm, bg: ENV.bg, img: ENV.img, mat: mode === 'placemat', names: matNames(), layers: layerList() })); };
   const fit = () => {
-    const w = $('#wrap'); sc = Math.max(.1, Math.min((w.clientWidth - 16) / W, (w.clientHeight - 16) / H));
-    cv.style.width = W * sc + 'px'; cv.style.height = H * sc + 'px'; redraw();
+    const w = $('#wrap'), [dw, dh] = ENV.dm;
+    const fx = w.scrollWidth ? (w.scrollLeft + w.clientWidth / 2) / w.scrollWidth : .5, fy = w.scrollHeight ? (w.scrollTop + w.clientHeight / 2) / w.scrollHeight : .5;
+    sc = Math.max(.05, Math.min((w.clientWidth - 16) / dw, (w.clientHeight - 16) / dh)) * z;
+    cv.style.width = dw * sc + 'px'; cv.style.height = dh * sc + 'px'; redraw();
+    w.scrollLeft = fx * w.scrollWidth - w.clientWidth / 2; w.scrollTop = fy * w.scrollHeight - w.clientHeight / 2;
   };
   addEventListener('resize', fit); fit();
 
@@ -243,15 +336,65 @@ async function student(code) {
   document.addEventListener('visibilitychange', chk); addEventListener('blur', chk); addEventListener('focus', chk); addEventListener('pagehide', () => joined && !blocked && ch.track({ name, away: true }));
 
   // Toegang controleren
-  const { data: ses } = await sb.from('sessions').select('code,closed,timer_end,frozen_at').eq('code', code).maybeSingle();
+  const { data: ses } = await sb.from('sessions').select('*').eq('code', code).maybeSingle();
   if (!ses) return setBlock('Deze sessie bestaat niet (of de verbinding mislukte).', true);
   const { data: kk } = await sb.from('kicked').select('student').eq('code', code).eq('student', uid).maybeSingle();
   const { data: own } = await sb.from('boards').select('data').eq('code', code).eq('student', uid).maybeSingle();
   let closed = ses.closed, kicked = !!kk, hasBoard = !!own;
   timerEnd = ses.timer_end ? Date.parse(ses.timer_end) : null; frozen = !!ses.frozen_at;
-  if (own && !b.s.length && !b.t.length && own.data) { // lokaal leeg (bv. andere browser): haal serverbord op
+  // Werkvorm gewisseld door de docent (epoch): oud bord weg
+  const ek = 'wb_epoch_' + code, epochReset = (ls.g(ek) || 0) !== (ses.epoch || 0);
+  if (epochReset) { b.s.length = 0; b.t.length = 0; ls.s(ek, ses.epoch || 0); ls.s('wb_board_' + code, b); }
+  if (!epochReset && own && !b.s.length && !b.t.length && own.data) { // lokaal leeg (bv. andere browser): haal serverbord op
     Object.assign(b, own.data); b.s = b.s || []; b.t = b.t || []; redraw();
   }
+
+  // Werkvorm: groep, vak (placemat), achtergrond, lagen van groepsgenoten
+  const grpOf = s => (s.groups || []).find(g => g.members.some(m => m.id === uid)) || null;
+  const gsig = s => JSON.stringify([s.mode || 'individual', s.epoch || 0, (s.mode || 'individual') === 'individual' ? null : grpOf(s)]);
+  const initSig = gsig(ses);
+  sess = ses; mode = ses.mode || 'individual';
+  myG = mode === 'individual' ? null : grpOf(ses);
+  myZone = mode === 'placemat' && myG ? ZORD[myG.members.findIndex(m => m.id === uid)] : null;
+  waiting = mode !== 'individual' && !myG;
+  ENV.dm = DIM[mode] || DIM.individual; ENV.bg = ses.bg || { type: 'white' }; ENV.img = null;
+  if (mode !== 'individual') { $('#zm').hidden = false; $('#panb').hidden = false; }
+  const setChips = () => {
+    const c = $('#grp'); c.hidden = mode === 'individual';
+    if (!myG) { c.innerHTML = '<b>⏳ Wacht op indeling door de docent</b>'; return; }
+    c.innerHTML = `<b>${mode === 'placemat' ? '🧩 Placemat' : '👥 ' + esc(myG.name)}</b>` + myG.members.map(m => `<span class="bdg${m.id === uid ? ' me' : ''}">${esc(m.name)}</span>`).join('')
+      + (mode === 'placemat' ? `<small>Jouw vak: ${ZNAME[myZone]}${sess && sess.reveal ? ' · vrijgegeven: het midden is voor iedereen' : ''}</small>` : '');
+  };
+  const loadOthers = async () => {
+    others = {};
+    if (mode !== 'individual' && myG) {
+      const { data } = await sb.from('boards').select('student,data').eq('code', code).neq('student', uid);
+      (data || []).forEach(r => { others[r.student] = { data: r.data }; });
+    }
+    redraw();
+  };
+  let bgKey = '';
+  const loadBg = async () => {
+    const bg = ENV.bg;
+    if (bg.type === 'image') {
+      if (String(bg.v) === bgKey) return;
+      bgKey = String(bg.v);
+      const { data } = await sb.from('bgimages').select('data').eq('code', code).maybeSingle();
+      if (data) { const im = new Image(); im.onload = () => { ENV.img = im; redraw(); }; im.src = data.data; }
+    } else { ENV.img = null; bgKey = ''; redraw(); }
+  };
+  const gotRow = r => { if (mode !== 'individual' && r.student !== uid && r.data) { others[r.student] = { data: r.data }; redraw(); } };
+  const applySess = row => {
+    if (!row) return;
+    if (gsig(row) !== initSig) { clearTimeout(timer); write(); setTimeout(() => location.reload(), 400); return; } // andere groep/werkvorm: opnieuw opbouwen
+    const rev = !sess || sess.reveal !== row.reveal, bgc = !sess || JSON.stringify(sess.bg) !== JSON.stringify(row.bg);
+    sess = row; ENV.bg = row.bg || { type: 'white' };
+    if (rev) loadOthers();
+    if (bgc) loadBg();
+    setChips(); redraw();
+  };
+  const refresh = () => sb.from('sessions').select('*').eq('code', code).maybeSingle().then(r => applySess(r.data));
+  setChips(); fit(); loadBg(); loadOthers();
 
   // Verwijderd door de docent: melding, daarna terug naar het beginscherm om opnieuw in te voeren
   let ejecting = false;
@@ -279,23 +422,27 @@ async function student(code) {
   ch.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'kicked', filter: 'code=eq.' + code },
       p => { if (p.new.student === uid) { kicked = true; apply(); } })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sessions', filter: 'code=eq.' + code },
-      p => { closed = !!p.new.closed; timerEnd = p.new.timer_end ? Date.parse(p.new.timer_end) : null; frozen = !!p.new.frozen_at; apply(); evalTimer(); })
+      p => { closed = !!p.new.closed; timerEnd = p.new.timer_end ? Date.parse(p.new.timer_end) : null; frozen = !!p.new.frozen_at; apply(); evalTimer(); refresh(); })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => gotRow(p.new))
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => gotRow(p.new))
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'boards' }, p => { if (p.old && p.old.code === code && others[p.old.student]) { delete others[p.old.student]; redraw(); } })
     .subscribe(s => { if (s === 'SUBSCRIBED') { joined = true; chk(); } });
   apply();
   // vangnet: ook als een realtime-bericht gemist wordt, volgt de status binnen 10 seconden
   setInterval(async () => {
-    const { data } = await sb.from('sessions').select('closed,timer_end,frozen_at').eq('code', code).maybeSingle();
+    const { data } = await sb.from('sessions').select('*').eq('code', code).maybeSingle();
     if (!data) return;
     const te = data.timer_end ? Date.parse(data.timer_end) : null, fr = !!data.frozen_at;
     const changed = data.closed !== closed || te !== timerEnd || fr !== frozen;
     closed = data.closed; timerEnd = te; frozen = fr;
     if (changed) { apply(); evalTimer(); }
+    applySess(data);
   }, 10000);
 
   // Timer: tijdens de timer mag je tekenen; daarna is het bord vergrendeld (wel zichtbaar)
   const pill = $('#tpill');
   function evalTimer() {
-    const left = timerEnd ? timerEnd - nowS() : null, timerLock = left !== null && left <= 0, lock = timerLock || frozen;
+    const left = timerEnd ? timerEnd - nowS() : null, timerLock = left !== null && left <= 0, lock = timerLock || frozen || waiting;
     pill.hidden = left === null && !frozen;
     pill.classList.toggle('done', lock);
     pill.textContent = timerLock ? '⏱ Tijd is om' : frozen ? '🔒 Vergrendeld door docent' : left !== null ? '⏱ ' + fmt(left) : '';
@@ -310,21 +457,30 @@ async function student(code) {
   }
   setInterval(evalTimer, 300); evalTimer();
 
-  const pos = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W | 0, (e.clientY - r.top) / r.height * H | 0]; };
+  const pos = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * ENV.dm[0] | 0, (e.clientY - r.top) / r.height * ENV.dm[1] | 0]; };
+  const allowed = (x, y) => { // placemat: alleen in het eigen vak, het midden pas na vrijgeven
+    if (mode !== 'placemat') return true;
+    const zn = zoneAt(x, y, ENV.dm[0], ENV.dm[1]);
+    return zn === 'c' ? !!(sess && sess.reveal) : zn === myZone;
+  };
   cv.onpointerdown = e => {
-    e.preventDefault(); if (locked || blocked) return;
+    e.preventDefault(); if (blocked) return;
+    if (tool === 'pan') { panning = [e.clientX, e.clientY]; cv.setPointerCapture(e.pointerId); return; }
+    if (locked) return;
     const [x, y] = pos(e);
+    if (!allowed(x, y)) { box.style.outline = '4px solid #ff4d4f'; setTimeout(() => box.style.outline = '', 300); return; }
     if (tool === 'tx') return addText(x, y);
     cur = { m: tool, c: color, w: tool === 'hl' ? sz * 4 : tool === 'er' ? sz * 5 : sz, p: [x, y] };
     b.s.push(cur); cv.setPointerCapture(e.pointerId); redraw();
   };
   cv.onpointermove = e => {
+    if (panning) { const w = $('#wrap'); w.scrollLeft -= e.clientX - panning[0]; w.scrollTop -= e.clientY - panning[1]; panning = [e.clientX, e.clientY]; return; }
     if (!cur) return;
     const [x, y] = pos(e), p = cur.p;
     if (Math.abs(x - p[p.length - 2]) + Math.abs(y - p[p.length - 1]) < 3) return;
     p.push(x, y); redraw();
   };
-  cv.onpointerup = cv.onpointercancel = () => { if (cur) { cur = null; save(); } };
+  cv.onpointerup = cv.onpointercancel = () => { panning = null; if (cur) { cur = null; save(); } };
 
   function addText(x, y) {
     const fs = sz * 4 + 12, ta = document.createElement('textarea');
@@ -340,12 +496,17 @@ async function student(code) {
   document.querySelectorAll('[data-t]').forEach(btn => btn.onclick = () => {
     tool = btn.dataset.t;
     document.querySelectorAll('[data-t]').forEach(o => o.classList.toggle('on', o === btn));
-    cv.style.cursor = tool === 'tx' ? 'text' : 'crosshair';
+    cv.style.cursor = tool === 'tx' ? 'text' : tool === 'pan' ? 'grab' : 'crosshair';
   });
   const sels = () => document.querySelectorAll('.sw[data-c]');
   sels().forEach(btn => btn.onclick = () => { color = btn.dataset.c; sels().forEach(o => o.classList.toggle('sel', o === btn)); });
   $('#col').oninput = e => { color = e.target.value; sels().forEach(o => o.classList.remove('sel')); };
   $('#sz').onchange = e => sz = +e.target.value;
+
+  // Inzoomen (groepsmodus): knoppen, Ctrl+scrollen; verschuiven met de hand-knop of scrollen
+  const zoomBy = f => { z = Math.min(8, Math.max(1, z * f)); fit(); };
+  $('#zi').onclick = () => zoomBy(1.25); $('#zo').onclick = () => zoomBy(1 / 1.25); $('#zf').onclick = () => { z = 1; fit(); };
+  $('#wrap').addEventListener('wheel', e => { if (mode !== 'individual' && e.ctrlKey) { e.preventDefault(); zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15); } }, { passive: false });
 
   // Volledig scherm (aan/uit met dezelfde knop)
   const de = document.documentElement, fsBtn = $('#fs');
@@ -366,10 +527,13 @@ async function teacher(code) {
   const st = { hide: ses.hide, shield: ses.shield, closed: ses.closed }, users = {}, els = {}, all = {}, seen = new Set();
   let online = {}, ready = false;
   let timerEnd = ses.timer_end ? Date.parse(ses.timer_end) : null, frozen = !!ses.frozen_at;
+  const cfg = { bg: ses.bg || { type: 'white' }, mode: ses.mode || 'individual', groups: ses.groups || [], reveal: !!ses.reveal, epoch: ses.epoch || 0 };
+  ENV.bg = cfg.bg; ENV.dm = DIM.individual; ENV.img = null;
+  let bgImg = null, gsel = null, gsigc = '', gt = 0;
 
   app.innerHTML = `<div class="tb"><a href="./">← Sessies</a><b>${esc(ses.name)}</b>
     <span class="code">${code}</span><button id="cp">Link kopiëren</button>
-    <button id="h"></button><button id="sh"></button><button id="cl"></button><button id="fz">🔓</button>
+    <button id="h"></button><button id="sh"></button><button id="cl"></button><button id="fz">🔓</button><button id="gear" aria-label="Instellingen" title="Instellingen">⚙️</button><button id="rv" hidden></button>
     <span class="tm"><input id="tmin" type="number" min="0.5" step="0.5" max="180" value="${ls.g('wb_tmin') || 5}" title="Minuten"><button id="tgo">⏱ Start timer</button><span id="tpill" class="tpill" hidden></span><button id="tx" title="Timer wegklikken" hidden>✕</button></span>
     <span id="cnt"></span></div><div id="grid"></div>`;
   const grid = $('#grid');
@@ -385,6 +549,10 @@ async function teacher(code) {
   const zcv = zoom.querySelector('canvas');
   const closeZoom = () => { zoomId = null; zoom.hidden = true; };
   const zdraw = () => {
+    if (cfg.mode !== 'individual') {
+      const g = cfg.groups.find(q => q.id === zoomId); if (!g) return closeZoom();
+      zoom.querySelector('.zn').textContent = g.name; render(zcv, 1600, gOpts(g)); return;
+    }
     const u = users[zoomId]; if (!u) return closeZoom();
     zoom.querySelector('.zn').textContent = st.hide ? '' : u.name;
     draw(zcv, { s: [], t: [], ...u.data }, 1600);
@@ -402,7 +570,10 @@ async function teacher(code) {
     fz.classList.toggle('on', frozen); fz.textContent = frozen ? '🔒' : '🔓'; fz.disabled = timerEnd !== null;
     fz.title = ft; fz.setAttribute('aria-label', ft); $('#sh').textContent = st.shield ? 'Wisbordjes tonen' : 'Wisbordjes afschermen';
     $('#cl').classList.toggle('on', st.closed); $('#cl').textContent = st.closed ? 'Sessie openen' : 'Sessie sluiten';
-    const n = Object.keys(users).length; $('#cnt').textContent = n + ' leerling' + (n === 1 ? '' : 'en');
+    const n = Object.keys(users).length, ng = cfg.groups.length;
+    $('#cnt').textContent = n + ' leerling' + (n === 1 ? '' : 'en') + (cfg.mode === 'individual' ? '' : ' · ' + ng + ' groep' + (ng === 1 ? '' : 'en'));
+    if (cfg.mode !== 'individual') gsoon();
+    if (!setm.hidden) rsoon();
   };
   const push = () => { sb.from('sessions').update(st).eq('code', code).then(() => {}); ui(); };
   $('#h').onclick = () => { st.hide = !st.hide; push(); };
@@ -428,7 +599,7 @@ async function teacher(code) {
   const sync = id => {
     const a = all[id]; if (!a) return;
     if (Date.parse(a.ts) >= runStart || online[id]) seen.add(id);
-    if (seen.has(id)) { users[id] = a; upd(id); if (zoomId === id) zdraw(); } else hide(id);
+    if (seen.has(id)) { users[id] = a; if (cfg.mode === 'individual') { upd(id); if (zoomId === id) zdraw(); } else gsoon(); } else hide(id);
   };
   function upd(id) {
     const u = users[id]; if (!u) return;
@@ -491,6 +662,185 @@ async function teacher(code) {
   };
   setInterval(tui, 300);
 
+  // ===== Werkvorm-weergave: groepen en placemat op het dashboard =====
+  const namesOf = g => { const n = []; if (!st.hide) g.members.forEach((m, i) => { n[ZORD[i]] = (all[m.id] && all[m.id].name) || m.name; }); return n; };
+  const gOpts = g => ({
+    dm: DIM[cfg.mode], bg: cfg.bg, img: bgImg, mat: cfg.mode === 'placemat', names: namesOf(g),
+    layers: [...g.members].sort((p, q) => p.id < q.id ? -1 : 1).filter(m => seen.has(m.id) && all[m.id])
+      .map(m => ({ data: all[m.id].data, zone: cfg.mode === 'placemat' ? ZORD[g.members.findIndex(q => q.id === m.id)] : null, center: true }))
+  });
+  const badge = (id, nm) => {
+    const o = online[id], bad = ready && seen.has(id) && (!o || o.away);
+    return `<span class="bdg${bad ? ' away' : ''}${seen.has(id) ? '' : ' off'}"><span class="bn">${esc(nm)}</span>${bad ? ' !' : ''}</span>`;
+  };
+  const gsoon = () => { if (!gt) gt = setTimeout(() => { gt = 0; gpaint(); }, 250); };
+  function gpaint() {
+    if (cfg.mode === 'individual') return;
+    const inG = new Set(cfg.groups.flatMap(g => g.members.map(m => m.id)));
+    const un = Object.keys(users).filter(id => !inG.has(id));
+    const sig = cfg.mode + JSON.stringify(cfg.groups.map(g => [g.id, g.name])) + (un.length ? 1 : 0);
+    if (sig !== gsigc) {
+      gsigc = sig; grid.innerHTML = '';
+      cfg.groups.forEach(g => {
+        const el = document.createElement('div'); el.className = 'cd'; el.dataset.g = g.id;
+        el.innerHTML = `<canvas></canvas><div class="ft"><b>${esc(g.name)}</b><button class="z" title="Vergroten">🔍</button></div><div class="bdgs"></div>`;
+        el.querySelector('.z').onclick = () => openZoom(g.id);
+        grid.append(el);
+      });
+      if (un.length) { const el = document.createElement('div'); el.className = 'cd'; el.dataset.u = '1'; el.innerHTML = '<div class="ft"><b>Niet ingedeeld</b></div><div class="bdgs"></div>'; grid.append(el); }
+    }
+    grid.querySelectorAll('.cd[data-g]').forEach(el => {
+      const g = cfg.groups.find(q => q.id === el.dataset.g); if (!g) return;
+      render(el.querySelector('canvas'), 400, gOpts(g));
+      el.querySelector('.bdgs').innerHTML = g.members.map(m => badge(m.id, (all[m.id] && all[m.id].name) || m.name)).join('') || '<small>Nog leeg</small>';
+    });
+    const ue = grid.querySelector('[data-u] .bdgs'); if (ue) ue.innerHTML = un.map(id => badge(id, users[id].name)).join('');
+  }
+  const saveCfg = async p => {
+    Object.assign(cfg, p);
+    const { error } = await sb.from('sessions').update(p).eq('code', code);
+    if (error) alert('Opslaan mislukt: ' + error.message + ' (is update-werkvormen.sql uitgevoerd in Supabase?)');
+  };
+  const repaintAll = () => {
+    if (cfg.mode === 'individual') { Object.values(els).forEach(el => { el._ts = null; }); Object.keys(users).forEach(upd); } else gsoon();
+    if (zoomId) zdraw();
+  };
+  const loadBgImg = async () => {
+    if (cfg.bg.type !== 'image') { bgImg = ENV.img = null; return; }
+    const { data } = await sb.from('bgimages').select('data').eq('code', code).maybeSingle();
+    if (data) { const im = new Image(); im.onload = () => { bgImg = ENV.img = im; repaintAll(); }; im.src = data.data; }
+  };
+  const applyMode = () => {
+    Object.keys(els).forEach(k => delete els[k]); grid.innerHTML = ''; gsigc = '';
+    $('#rv').hidden = cfg.mode !== 'placemat';
+    $('#rv').textContent = cfg.reveal ? '🙈 Placemat weer verbergen' : '👁 Placemat vrijgeven'; $('#rv').classList.toggle('on', cfg.reveal);
+    if (cfg.mode === 'individual') Object.keys(all).forEach(sync); else gsoon();
+    ui();
+  };
+  $('#rv').onclick = async () => { await saveCfg({ reveal: !cfg.reveal }); applyMode(); };
+
+  // ===== Instellingen (modal): achtergrond, werkvorm, groepen =====
+  const setm = document.createElement('div'); setm.id = 'set'; setm.hidden = true;
+  setm.innerHTML = `<div class="sb">
+    <div class="sh"><b>⚙️ Instellingen</b><button id="sx">✕ Sluiten</button></div>
+    <h3>Achtergrond</h3>
+    <div class="pills" id="bgp"><button data-bg="white">Wit</button><button data-bg="lines">Lijntjes</button><button data-bg="grid">Ruitjes 1×1 cm</button><button data-bg="dots">Bullet journal</button>
+      <label class="filebtn" id="bgl">🖼️ Afbeelding…<input type="file" id="bgf" accept="image/*" hidden></label></div>
+    <div id="bgimg" hidden><canvas id="bgprev"></canvas>
+      <div class="row"><span>Zoom</span><input id="bgz" type="range" min="1" max="3" step="0.05" value="1"><button id="bgok" class="on">Toepassen</button></div>
+      <small>Sleep de afbeelding om hem te verplaatsen. De preview heeft de verhouding van het wisbordje.</small></div>
+    <h3>Werkvorm</h3>
+    <div class="pills" id="modep"><button data-m="individual">Individueel</button><button data-m="groups">Break-out groepen</button><button data-m="placemat">Placemat</button></div>
+    <div id="grpset" hidden>
+      <div class="row"><select id="rmode"><option value="per">Leerlingen per groep</option><option value="n">Aantal groepen</option></select><input id="rnum" type="number" min="1" max="30" value="4"><button id="rgo" class="on">🎲 Willekeurig indelen</button></div>
+      <div class="row"><button id="gadd">+ Groep</button><small>Klik op een leerling en daarna op een groep (of op "Niet ingedeeld") om te verplaatsen.</small></div>
+      <div id="gedit"></div></div></div>`;
+  document.body.append(setm);
+  let pend = null, dragp = null;
+  const prevCv = $('#bgprev');
+  const prev = () => { if (pend) render(prevCv, 560, { dm: DIM.individual, bg: { type: 'image', z: pend.z, x: pend.x, y: pend.y }, img: pend.img, layers: [] }); };
+  prevCv.onpointerdown = e => { if (pend) { dragp = [e.clientX, e.clientY]; prevCv.setPointerCapture(e.pointerId); } };
+  prevCv.onpointermove = e => {
+    if (!dragp) return; const r = prevCv.getBoundingClientRect();
+    pend.x += (e.clientX - dragp[0]) / r.width; pend.y += (e.clientY - dragp[1]) / r.height; dragp = [e.clientX, e.clientY]; prev();
+  };
+  prevCv.onpointerup = () => { dragp = null; };
+  $('#bgz').oninput = e => { if (pend) { pend.z = +e.target.value; prev(); } };
+  $('#bgf').onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    const im = new Image(), url = URL.createObjectURL(f);
+    im.onload = () => {
+      const k = Math.min(1, 1600 / Math.max(im.width, im.height)), c = document.createElement('canvas'), x = c.getContext('2d');
+      c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+      x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0, c.width, c.height);
+      const data = c.toDataURL('image/jpeg', .8), im2 = new Image();
+      im2.onload = () => { pend = { img: im2, data, z: 1, x: 0, y: 0 }; $('#bgz').value = 1; $('#bgimg').hidden = false; prev(); };
+      im2.src = data; URL.revokeObjectURL(url);
+    };
+    im.src = url; e.target.value = '';
+  };
+  $('#bgok').onclick = async () => {
+    if (!pend) return;
+    if (pend.data) {
+      const { error } = await sb.from('bgimages').upsert({ code, data: pend.data });
+      if (error) return alert('Afbeelding opslaan mislukt: ' + error.message);
+    }
+    await saveCfg({ bg: { type: 'image', z: pend.z, x: pend.x, y: pend.y, v: Date.now() } });
+    bgImg = ENV.img = pend.img; ENV.bg = cfg.bg; $('#bgimg').hidden = true; pend = null; renderSet(); repaintAll();
+  };
+  setm.querySelectorAll('[data-bg]').forEach(btn => btn.onclick = async () => {
+    pend = null; $('#bgimg').hidden = true;
+    await saveCfg({ bg: { type: btn.dataset.bg } }); bgImg = ENV.img = null; ENV.bg = cfg.bg; renderSet(); repaintAll();
+  });
+  setm.querySelectorAll('[data-m]').forEach(btn => btn.onclick = async () => {
+    const m = btn.dataset.m; if (m === cfg.mode) return;
+    if (!confirm('Van werkvorm wisselen wist alle bordjes van deze sessie. Doorgaan?')) return;
+    await sb.from('boards').delete().eq('code', code);
+    Object.keys(all).forEach(k => { delete all[k]; seen.delete(k); delete users[k]; });
+    await saveCfg({ mode: m, groups: [], reveal: false, epoch: cfg.epoch + 1 });
+    applyMode(); renderSet();
+  });
+
+  // groepen indelen
+  const moveTo = async (id, gid) => {
+    const gs = cfg.groups.map(g => ({ ...g, members: g.members.filter(m => m.id !== id) }));
+    if (gid) {
+      const g = gs.find(q => q.id === gid); if (!g) return;
+      if (cfg.mode === 'placemat' && g.members.length >= 4) return alert('Een placemat-groep heeft maximaal 4 leerlingen.');
+      g.members.push({ id, name: (users[id] || all[id] || {}).name || '?' });
+    }
+    await saveCfg({ groups: gs }); gsoon();
+  };
+  const kickStudent = async id => {
+    if (!confirm(((users[id] || {}).name || 'Deze leerling') + ' verwijderen uit de sessie?')) return;
+    await sb.from('kicked').insert({ code, student: id });
+    await sb.from('boards').delete().eq('code', code).eq('student', id);
+    await saveCfg({ groups: cfg.groups.map(g => ({ ...g, members: g.members.filter(m => m.id !== id) })) });
+    drop(id); renderSet();
+  };
+  $('#gadd').onclick = async () => { await saveCfg({ groups: [...cfg.groups, { id: 'g' + rnd(5), name: 'Groep ' + (cfg.groups.length + 1), members: [] }] }); renderSet(); gsoon(); };
+  $('#rgo').onclick = async () => {
+    const ids = Object.keys(users), n = ids.length;
+    if (!n) return alert('Er zijn nog geen leerlingen in de sessie.');
+    if (cfg.groups.some(g => g.members.length) && !confirm('De bestaande indeling vervangen?')) return;
+    for (let i = n - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [ids[i], ids[j]] = [ids[j], ids[i]]; }
+    const num = Math.max(1, parseInt($('#rnum').value) || 1);
+    let G = $('#rmode').value === 'per' ? Math.ceil(n / num) : Math.min(num, n);
+    if (cfg.mode === 'placemat') G = Math.min(Math.max(G, Math.ceil(n / 4)), Math.max(1, n >> 1)); // 2-4 per placemat
+    const gs = Array.from({ length: G }, (_, i) => ({ id: 'g' + rnd(5), name: 'Groep ' + (i + 1), members: [] }));
+    ids.forEach((id, i) => gs[i % G].members.push({ id, name: users[id].name }));
+    await saveCfg({ groups: gs }); renderSet(); gsoon();
+  };
+  const renderSet = () => {
+    setm.querySelectorAll('[data-bg]').forEach(b => b.classList.toggle('on', cfg.bg.type === b.dataset.bg));
+    $('#bgl').classList.toggle('on', cfg.bg.type === 'image');
+    setm.querySelectorAll('[data-m]').forEach(b => b.classList.toggle('on', cfg.mode === b.dataset.m));
+    $('#grpset').hidden = cfg.mode === 'individual';
+    if (cfg.mode === 'individual') return;
+    $('#rnum').max = cfg.mode === 'placemat' ? 4 : 30;
+    const inG = new Set(cfg.groups.flatMap(g => g.members.map(m => m.id)));
+    const chip = (id, nm) => `<span class="bdg${gsel === id ? ' pick' : ''}" data-id="${id}">${esc(nm)}<i data-kick="${id}" title="Uit de sessie verwijderen">✕</i></span>`;
+    $('#gedit').innerHTML = '<div class="gc" data-to=""><b>Niet ingedeeld</b>' + Object.keys(users).filter(id => !inG.has(id)).map(id => chip(id, users[id].name)).join('') + '</div>'
+      + cfg.groups.map(g => `<div class="gc" data-to="${g.id}"><b>${esc(g.name)}</b>${g.members.map(m => chip(m.id, (all[m.id] && all[m.id].name) || m.name)).join('')}<i data-del="${g.id}" title="Groep verwijderen">🗑</i></div>`).join('');
+  };
+  let rt = 0; const rsoon = () => { clearTimeout(rt); rt = setTimeout(renderSet, 400); };
+  $('#gedit').onclick = async e => {
+    const k = e.target.closest('[data-kick]'); if (k) return kickStudent(k.dataset.kick);
+    const d = e.target.closest('[data-del]'); if (d) { await saveCfg({ groups: cfg.groups.filter(g => g.id !== d.dataset.del) }); renderSet(); gsoon(); return; }
+    const c = e.target.closest('[data-id]'); if (c) { gsel = gsel === c.dataset.id ? null : c.dataset.id; renderSet(); return; }
+    const t = e.target.closest('[data-to]'); if (t && gsel) { const id = gsel; gsel = null; await moveTo(id, t.dataset.to); renderSet(); }
+  };
+  const openSet = () => {
+    setm.hidden = false;
+    if (cfg.bg.type === 'image' && bgImg) { pend = { img: bgImg, data: null, z: cfg.bg.z || 1, x: cfg.bg.x || 0, y: cfg.bg.y || 0 }; $('#bgz').value = pend.z; $('#bgimg').hidden = false; prev(); }
+    else if (!pend) $('#bgimg').hidden = true;
+    renderSet();
+  };
+  $('#gear').onclick = openSet;
+  setm.onclick = e => { if (e.target === setm || e.target.id === 'sx') setm.hidden = true; };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') setm.hidden = true; });
+  loadBgImg(); applyMode();
+
   const { data: rows } = await sb.from('boards').select('student,name,data,updated_at').eq('code', code);
   (rows || []).forEach(setU);
   ui();
@@ -499,7 +849,7 @@ async function teacher(code) {
   ch.on('presence', { event: 'sync' }, () => {
     online = {}; const s = ch.presenceState();
     for (const k in s) online[k] = s[k][s[k].length - 1];
-    ready = true; Object.keys(all).forEach(sync); ui();
+    ready = true; Object.keys(all).forEach(sync); gsoon(); ui();
   })
   .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => setU(p.new))
   .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => setU(p.new))
