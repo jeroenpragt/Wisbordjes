@@ -112,6 +112,19 @@ a:hover{text-decoration:underline}
 #info small{background:rgba(255,255,255,.88);padding:3px 10px;border-radius:999px;font-weight:600;color:var(--mute);font-size:.8rem}
 #info .chips{background:rgba(255,255,255,.92);padding:4px 10px;border-radius:999px;box-shadow:var(--sh)}
 .tb b{max-width:150px;overflow:hidden;text-overflow:ellipsis}
+#pager{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:8;display:flex;gap:6px;align-items:center;background:#fff;border-radius:999px;padding:6px 10px;box-shadow:0 10px 30px rgba(60,50,120,.28)}
+#pager span{font-weight:700;padding:0 6px;white-space:nowrap}
+#pager .pgs{width:1px;height:22px;background:var(--line);padding:0}
+#grid{padding-bottom:84px}
+#slst{display:flex;flex-direction:column;gap:6px}
+.slr{display:flex;align-items:center;gap:10px;padding:6px 8px;border:1.5px solid var(--line);border-radius:12px;cursor:pointer}
+.slr.edit{border-color:var(--primary);background:#f4f2ff}
+.slr canvas{width:96px;height:56px;border-radius:6px;border:1px solid var(--line);flex:none}
+.sln{flex:1;display:flex;flex-direction:column;line-height:1.25}
+.sln em{font-style:normal;background:var(--green);color:#fff;border-radius:999px;padding:0 8px;font-size:.75rem;margin-left:6px}
+.sln small{color:var(--mute)}
+.slb{display:flex;gap:4px}
+.slb button{padding:4px 9px}
 /* Compacte werkbalken: één rij op een scherm van 13 inch (knoppen ca. 10% kleiner) */
 .bar,.tb{flex-wrap:nowrap;gap:5px;padding:8px 12px;font-size:.9rem;overflow-x:auto;scrollbar-width:none}
 .bar::-webkit-scrollbar,.tb::-webkit-scrollbar{display:none}
@@ -226,11 +239,17 @@ function render(cv, pw, o) {
     x.drawImage(OFF, 0, 0);
   }
 }
+// Slides: elke sessie heeft een lijst slides (met achtergrond) en een huidige slide
+const newId = () => 's' + rnd(5);
+function slidesOf(row) {
+  const list = Array.isArray(row.slides) && row.slides.length ? row.slides : [{ id: 's1', bg: row.bg || { type: 'white' } }];
+  return { list, cur: list.find(x => x.id === row.cur) || list[0] };
+}
 const draw = (cv, b, w) => render(cv, w, { dm: ENV.dm, bg: ENV.bg, img: ENV.img, layers: [{ data: b }] });
 
 // ====== INSTELLEN: kopieer deze twee waarden uit Supabase (Project Settings > API) ======
-const SUPABASE_URL = 'https://mrntifcakwmwdlywaqgt.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_Ji_-mqWB7EFTtvxxS3xTKA_XJNSEX1D';
+const SUPABASE_URL = 'https://JOUW-PROJECT.supabase.co';
+const SUPABASE_KEY = 'JOUW-PUBLISHABLE-KEY';
 // ===========================================================================================
 
 const sb = (typeof supabase !== 'undefined' && !SUPABASE_URL.includes('JOUW-')) ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
@@ -303,11 +322,12 @@ async function student(code) {
     $('#go').onclick = () => { const v = $('#n').value.trim(); if (v) { ls.s('wb_name_' + code, v); student(code); } };
     return;
   }
-  const b = ls.g('wb_board_' + code) || { s: [], t: [] };
+  const b = { s: [], t: [] };
+  const bkey = id => 'wb_board_' + code + (id === 's1' ? '' : '_' + id); // bord per slide
   const SW = ['#1f2340', '#ff6a55', '#ffc93c', '#14b789', '#5b94c8', '#7c5cf0'];
   let tool = 'pen', color = SW[0], sz = 6, cur = null, timer = 0, sc = 1, raf = 0;
   let others = {}, sess = null, mode = 'individual', myG = null, myZone = null, z = 1, waiting = false, panning = null;
-  let blocked = true, wr = false, pend = false, joined = false, locked = false, timerEnd = null, frozen = false;
+  let blocked = true, wr = false, pend = false, joined = false, locked = false, timerEnd = null, frozen = false, slideId = 's1', switching = false;
 
   app.innerHTML = `<div class="st"><div class="bar">
     <button data-t="pen" class="on">✏️ Pen</button><button data-t="hl">🖍️ Marker</button>
@@ -318,7 +338,7 @@ async function student(code) {
     <button id="undo">↶</button><button id="clr" title="Alles wissen">🗑 Alles</button>
     <span id="tpill" class="tpill" hidden></span>
     <span class="sp"></span><button id="fs" title="Volledig scherm" aria-label="Volledig scherm">⛶</button></div>
-    <div id="info"><small>${esc(name)} · ${esc(code)}</small><span id="grp" class="chips" hidden></span></div>
+    <div id="info"><small>${esc(name)} · ${esc(code)}</small><small id="sn" hidden></small><span id="grp" class="chips" hidden></span></div>
     <div id="wrap"><div id="box"><canvas id="cv"></canvas></div></div></div>
     <div id="msg">Verbinden…</div>`;
   const cv = $('#cv'), box = $('#box'), msg = $('#msg');
@@ -332,10 +352,10 @@ async function student(code) {
     if (blocked) return;
     if (wr) { pend = true; return; }
     wr = true;
-    await sb.from('boards').update({ name, data: b, updated_at: new Date().toISOString() }).eq('code', code).eq('student', uid);
+    await sb.from('boards').update({ name, data: b, updated_at: new Date().toISOString() }).eq('code', code).eq('slide', slideId).eq('student', uid);
     wr = false; if (pend) { pend = false; write(); }
   };
-  const save = () => { ls.s('wb_board_' + code, b); clearTimeout(timer); timer = setTimeout(write, 600); };
+  const save = () => { ls.s(bkey(slideId), b); clearTimeout(timer); timer = setTimeout(write, 600); };
   // Alle lagen van de groep (eigen laag live), gesorteerd zodat iedereen dezelfde stapeling ziet
   const layerList = () => Object.entries(others).map(([id, o]) => [id, o.data]).concat([[uid, b]]).sort((p, q) => p[0] < q[0] ? -1 : 1)
     .map(([id, d]) => mode === 'placemat' && myG
@@ -362,13 +382,19 @@ async function student(code) {
   const { data: ses } = await sb.from('sessions').select('*').eq('code', code).maybeSingle();
   if (!ses) return setBlock('Deze sessie bestaat niet (of de verbinding mislukte).', true);
   const { data: kk } = await sb.from('kicked').select('student').eq('code', code).eq('student', uid).maybeSingle();
-  const { data: own } = await sb.from('boards').select('data').eq('code', code).eq('student', uid).maybeSingle();
+  const sl0 = slidesOf(ses); slideId = sl0.cur.id;
+  const loc0 = ls.g(bkey(slideId)); if (loc0) { b.s = loc0.s || []; b.t = loc0.t || []; }
+  const { data: own } = await sb.from('boards').select('data').eq('code', code).eq('slide', slideId).eq('student', uid).maybeSingle();
   let closed = ses.closed, kicked = !!kk, hasBoard = !!own;
   timerEnd = ses.timer_end ? Date.parse(ses.timer_end) : null; frozen = !!ses.frozen_at;
   // Werkvorm gewisseld door de docent (epoch): oud bord weg
   const ek = 'wb_epoch_' + code, epochReset = (ls.g(ek) || 0) !== (ses.epoch || 0);
-  if (epochReset) { b.s.length = 0; b.t.length = 0; ls.s(ek, ses.epoch || 0); ls.s('wb_board_' + code, b); }
-  if (!epochReset && own && !b.s.length && !b.t.length && own.data) { // lokaal leeg (bv. andere browser): haal serverbord op
+  if (epochReset) { b.s.length = 0; b.t.length = 0; ls.s(ek, ses.epoch || 0); ls.s(bkey(slideId), b); }
+  // Docent heeft alle bordjes van deze slide gewist: lokaal bord ook leegmaken
+  const wipeKey = id => 'wb_wipe_' + code + '_' + id, wipeOf = (row, id) => (row.wipes || {})[id] || 0;
+  const wipeReset = (ls.g(wipeKey(slideId)) || 0) !== wipeOf(ses, slideId);
+  if (wipeReset) { b.s.length = 0; b.t.length = 0; ls.s(wipeKey(slideId), wipeOf(ses, slideId)); ls.s(bkey(slideId), b); }
+  if (!epochReset && !wipeReset && own && !b.s.length && !b.t.length && own.data) { // lokaal leeg (bv. andere browser): haal serverbord op
     Object.assign(b, own.data); b.s = b.s || []; b.t = b.t || []; redraw();
   }
 
@@ -380,7 +406,7 @@ async function student(code) {
   myG = mode === 'individual' ? null : grpOf(ses);
   myZone = mode === 'placemat' && myG ? ZORD[myG.members.findIndex(m => m.id === uid)] : null;
   waiting = mode !== 'individual' && !myG;
-  ENV.dm = DIM[mode] || DIM.individual; ENV.bg = ses.bg || { type: 'white' }; ENV.img = null;
+  ENV.dm = DIM[mode] || DIM.individual; ENV.bg = sl0.cur.bg; ENV.img = null;
   if (mode !== 'individual') { $('#zm').hidden = false; $('#panb').hidden = false; }
   const setChips = () => {
     const c = $('#grp'); c.hidden = mode === 'individual';
@@ -391,7 +417,7 @@ async function student(code) {
   const loadOthers = async () => {
     others = {};
     if (mode !== 'individual' && myG) {
-      const { data } = await sb.from('boards').select('student,data').eq('code', code).neq('student', uid);
+      const { data } = await sb.from('boards').select('student,data').eq('code', code).eq('slide', slideId).neq('student', uid);
       (data || []).forEach(r => { others[r.student] = { data: r.data }; });
     }
     redraw();
@@ -400,24 +426,52 @@ async function student(code) {
   const loadBg = async () => {
     const bg = ENV.bg;
     if (bg.type === 'image') {
-      if (String(bg.v) === bgKey) return;
-      bgKey = String(bg.v);
-      const { data } = await sb.from('bgimages').select('data').eq('code', code).maybeSingle();
+      const key = slideId + ':' + bg.v;
+      if (key === bgKey) return;
+      bgKey = key;
+      const { data } = await sb.from('bgimages').select('data').eq('code', code).eq('slide', slideId).maybeSingle();
       if (data) { const im = new Image(); im.onload = () => { ENV.img = im; redraw(); }; im.src = data.data; }
     } else { ENV.img = null; bgKey = ''; redraw(); }
   };
-  const gotRow = r => { if (mode !== 'individual' && r.student !== uid && r.data) { others[r.student] = { data: r.data }; redraw(); } };
-  const applySess = row => {
-    if (!row) return;
+  const gotRow = r => { if (mode !== 'individual' && r.slide === slideId && r.student !== uid && r.data) { others[r.student] = { data: r.data }; redraw(); } };
+  const setSlideUI = row => {
+    const { list, cur: c0 } = slidesOf(row), n = $('#sn');
+    n.hidden = list.length < 2; n.textContent = 'Slide ' + (list.indexOf(c0) + 1) + '/' + list.length;
+  };
+  const clearBoard = () => { clearTimeout(timer); b.s.length = 0; b.t.length = 0; ls.s(bkey(slideId), b); hasBoard = false; apply(); redraw(); };
+  // De docent gaat naar een andere slide: bord, achtergrond en groepsgenoten wisselen mee (zonder de pagina te herladen)
+  const switchSlide = async (id, row) => {
+    switching = true;
+    try {
+      clearTimeout(timer); await write(); // oude slide eerst opslaan
+      slideId = id; others = {}; ENV.img = null; bgKey = '';
+      const loc = ls.g(bkey(id)); b.s = (loc && loc.s) || []; b.t = (loc && loc.t) || [];
+      const { data: ex } = await sb.from('boards').select('data').eq('code', code).eq('slide', id).eq('student', uid).maybeSingle();
+      hasBoard = !!ex;
+      const wn = wipeOf(row, id);
+      if ((ls.g(wipeKey(id)) || 0) !== wn) { ls.s(wipeKey(id), wn); b.s.length = 0; b.t.length = 0; ls.s(bkey(id), b); }
+      else if (ex && ex.data && !b.s.length && !b.t.length) { b.s = ex.data.s || []; b.t = ex.data.t || []; }
+      sess = row; ENV.bg = slidesOf(row).cur.bg;
+      await apply(); loadBg(); loadOthers(); setChips(); redraw();
+    } finally { switching = false; }
+    refresh(); // mocht de docent intussen alweer verder zijn gegaan
+  };
+  const applySess = async row => {
+    if (!row || switching) return;
     if (gsig(row) !== initSig) { clearTimeout(timer); write(); setTimeout(() => location.reload(), 400); return; } // andere groep/werkvorm: opnieuw opbouwen
-    const rev = !sess || sess.reveal !== row.reveal, bgc = !sess || JSON.stringify(sess.bg) !== JSON.stringify(row.bg);
-    sess = row; ENV.bg = row.bg || { type: 'white' };
+    setSlideUI(row);
+    const cs = slidesOf(row).cur;
+    if (cs.id !== slideId) { await switchSlide(cs.id, row); return; }
+    const wn = wipeOf(row, slideId);
+    if (wn !== (ls.g(wipeKey(slideId)) || 0)) { ls.s(wipeKey(slideId), wn); clearBoard(); }
+    const rev = !sess || sess.reveal !== row.reveal, bgc = !sess || JSON.stringify(slidesOf(sess).cur.bg) !== JSON.stringify(cs.bg);
+    sess = row; ENV.bg = cs.bg;
     if (rev) loadOthers();
     if (bgc) loadBg();
     setChips(); redraw();
   };
   const refresh = () => sb.from('sessions').select('*').eq('code', code).maybeSingle().then(r => applySess(r.data));
-  setChips(); fit(); loadBg(); loadOthers();
+  setChips(); setSlideUI(ses); fit(); loadBg(); loadOthers();
 
   // Verwijderd door de docent: melding, daarna terug naar het beginscherm om opnieuw in te voeren
   let ejecting = false;
@@ -426,7 +480,7 @@ async function student(code) {
     setBlock(KICK + ' Je wordt doorgestuurd naar het beginscherm…');
     if (joined) ch.untrack();
     await sb.from('kicked').delete().eq('code', code).eq('student', uid); // opnieuw meedoen mag weer
-    try { localStorage.removeItem('wb_board_' + code); localStorage.removeItem('wb_name_' + code); } catch {}
+    try { Object.keys(localStorage).filter(k => k.startsWith('wb_board_' + code) || k.startsWith('wb_wipe_' + code)).forEach(k => localStorage.removeItem(k)); localStorage.removeItem('wb_name_' + code); } catch {}
     setTimeout(() => { location.href = location.pathname; }, 2500);
   };
 
@@ -435,8 +489,8 @@ async function student(code) {
     if (kicked) return ejected();
     if (closed) { setBlock('De docent heeft de sessie gesloten. Je kunt niet meer tekenen.'); if (joined) ch.untrack(); return; }
     if (!hasBoard) {
-      const { error } = await sb.from('boards').insert({ code, student: uid, name, data: b });
-      if (error) return setBlock('Meedoen mislukt: ' + error.message, true);
+      const { error } = await sb.from('boards').insert({ code, slide: slideId, student: uid, name, data: b });
+      if (error && error.code !== '23505') return setBlock('Meedoen mislukt: ' + error.message, true);
       hasBoard = true;
     }
     setBlock(null); chk(); write();
@@ -448,7 +502,7 @@ async function student(code) {
       p => { closed = !!p.new.closed; timerEnd = p.new.timer_end ? Date.parse(p.new.timer_end) : null; frozen = !!p.new.frozen_at; apply(); evalTimer(); refresh(); })
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => gotRow(p.new))
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => gotRow(p.new))
-    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'boards' }, p => { if (p.old && p.old.code === code && others[p.old.student]) { delete others[p.old.student]; redraw(); } })
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'boards' }, p => { if (p.old && p.old.code === code && (!p.old.slide || p.old.slide === slideId) && others[p.old.student]) { delete others[p.old.student]; redraw(); } })
     .subscribe(s => { if (s === 'SUBSCRIBED') { joined = true; chk(); } });
   apply();
   // vangnet: ook als een realtime-bericht gemist wordt, volgt de status binnen 10 seconden
@@ -473,7 +527,7 @@ async function student(code) {
       locked = lock; $('.st').classList.toggle('locked', locked);
       if (locked) {
         box.querySelectorAll('textarea').forEach(t => t.blur());
-        if (cur) { cur = null; ls.s('wb_board_' + code, b); }
+        if (cur) { cur = null; ls.s(bkey(slideId), b); }
         clearTimeout(timer); write(); // laatste stand meteen opslaan
       }
     }
@@ -550,9 +604,11 @@ async function teacher(code) {
   const st = { hide: ses.hide, shield: ses.shield, closed: ses.closed }, users = {}, els = {}, all = {}, seen = new Set();
   let online = {}, ready = false;
   let timerEnd = ses.timer_end ? Date.parse(ses.timer_end) : null, frozen = !!ses.frozen_at;
-  const cfg = { bg: ses.bg || { type: 'white' }, mode: ses.mode || 'individual', groups: ses.groups || [], reveal: !!ses.reveal, epoch: ses.epoch || 0 };
+  const sl0 = slidesOf(ses);
+  const cfg = { slides: sl0.list, cur: sl0.cur.id, wipes: ses.wipes || {}, bg: sl0.cur.bg, mode: ses.mode || 'individual', groups: ses.groups || [], reveal: !!ses.reveal, epoch: ses.epoch || 0 };
   ENV.bg = cfg.bg; ENV.dm = DIM.individual; ENV.img = null;
-  let bgImg = null, gsel = null, gsigc = '', gt = 0;
+  let bgImg = null, gsel = null, gsigc = '', gt = 0, editId = cfg.cur;
+  const imgs = {}, BGN = { white: 'Wit', lines: 'Lijntjes', grid: 'Ruitjes', dots: 'Bullet journal', image: 'Afbeelding' };
 
   app.innerHTML = `<div class="tb"><a href="./" title="Terug naar je sessies">←</a><b>${esc(ses.name)}</b>
     <span class="code">${code}</span><button id="cp" title="Leerlinglink kopiëren">🔗 Link</button>
@@ -723,17 +779,21 @@ async function teacher(code) {
   const saveCfg = async p => {
     Object.assign(cfg, p);
     const { error } = await sb.from('sessions').update(p).eq('code', code);
-    if (error) alert('Opslaan mislukt: ' + error.message + ' (is update-werkvormen.sql uitgevoerd in Supabase?)');
+    if (error) alert('Opslaan mislukt: ' + error.message + ' (zijn alle update-scripts uitgevoerd in Supabase?)');
   };
   const repaintAll = () => {
     if (cfg.mode === 'individual') { Object.values(els).forEach(el => { el._ts = null; }); Object.keys(users).forEach(upd); } else gsoon();
     if (zoomId) zdraw();
   };
-  const loadBgImg = async () => {
-    if (cfg.bg.type !== 'image') { bgImg = ENV.img = null; return; }
-    const { data } = await sb.from('bgimages').select('data').eq('code', code).maybeSingle();
-    if (data) { const im = new Image(); im.onload = () => { bgImg = ENV.img = im; repaintAll(); }; im.src = data.data; }
+  const loadImg = async id => { // achtergrondafbeelding van een slide (met cache)
+    const sl = cfg.slides.find(q => q.id === id);
+    if (!sl || sl.bg.type !== 'image') { delete imgs[id]; return null; }
+    if (imgs[id] && imgs[id]._v === sl.bg.v) return imgs[id];
+    const { data } = await sb.from('bgimages').select('data').eq('code', code).eq('slide', id).maybeSingle();
+    if (!data) return null;
+    return new Promise(res => { const im = new Image(); im.onload = () => { im._v = sl.bg.v; imgs[id] = im; res(im); }; im.onerror = () => res(null); im.src = data.data; });
   };
+  const loadCurImg = async () => { bgImg = ENV.img = await loadImg(cfg.cur); repaintAll(); };
   const applyMode = () => {
     Object.keys(els).forEach(k => delete els[k]); grid.innerHTML = ''; gsigc = '';
     $('#rv').hidden = cfg.mode !== 'placemat';
@@ -747,7 +807,13 @@ async function teacher(code) {
   const setm = document.createElement('div'); setm.id = 'set'; setm.hidden = true;
   setm.innerHTML = `<div class="sb">
     <div class="sh"><b>⚙️ Instellingen</b><button id="sx">✕ Sluiten</button></div>
-    <h3>Achtergrond</h3>
+    <h3>Slides</h3>
+    <div id="slst"></div>
+    <div class="pills"><button id="sladd">+ Slide</button><button id="slexp" title="Slides en achtergronden opslaan als bestand">⬇ Exporteren</button>
+      <label class="filebtn">⬆ Importeren…<input type="file" id="slimp" accept=".json,application/json" hidden></label>
+      <select id="slmode"><option value="replace">Slides vervangen</option><option value="add">Toevoegen</option></select></div>
+    <small>Een export bevat alleen het aantal slides en de achtergronden, geen aantekeningen van leerlingen.</small>
+    <h3 id="bgh">Achtergrond</h3>
     <div class="pills" id="bgp"><button data-bg="white">Wit</button><button data-bg="lines">Lijntjes</button><button data-bg="grid">Ruitjes 1×1 cm</button><button data-bg="dots">Bullet journal</button>
       <label class="filebtn" id="bgl">🖼️ Afbeelding…<input type="file" id="bgf" accept="image/*" hidden></label></div>
     <div id="bgimg" hidden><canvas id="bgprev"></canvas>
@@ -788,18 +854,27 @@ async function teacher(code) {
     };
     im.src = url; e.target.value = '';
   };
+  const setSlideBg = async (id, bg) => {
+    await saveCfg({ slides: cfg.slides.map(q => q.id === id ? { ...q, bg } : q) });
+    if (id === cfg.cur) { cfg.bg = bg; ENV.bg = bg; }
+  };
   $('#bgok').onclick = async () => {
     if (!pend) return;
     if (pend.data) {
-      const { error } = await sb.from('bgimages').upsert({ code, data: pend.data });
+      const { error } = await sb.from('bgimages').upsert({ code, slide: editId, data: pend.data });
       if (error) return alert('Afbeelding opslaan mislukt: ' + error.message);
     }
-    await saveCfg({ bg: { type: 'image', z: pend.z, x: pend.x, y: pend.y, v: Date.now() } });
-    bgImg = ENV.img = pend.img; ENV.bg = cfg.bg; $('#bgimg').hidden = true; pend = null; renderSet(); repaintAll();
+    const bg = { type: 'image', z: pend.z, x: pend.x, y: pend.y, v: Date.now() };
+    await setSlideBg(editId, bg);
+    pend.img._v = bg.v; imgs[editId] = pend.img;
+    if (editId === cfg.cur) bgImg = ENV.img = pend.img;
+    $('#bgimg').hidden = true; pend = null; renderSet(); repaintAll();
   };
   setm.querySelectorAll('[data-bg]').forEach(btn => btn.onclick = async () => {
     pend = null; $('#bgimg').hidden = true;
-    await saveCfg({ bg: { type: btn.dataset.bg } }); bgImg = ENV.img = null; ENV.bg = cfg.bg; renderSet(); repaintAll();
+    await setSlideBg(editId, { type: btn.dataset.bg }); delete imgs[editId];
+    if (editId === cfg.cur) bgImg = ENV.img = null;
+    renderSet(); repaintAll();
   });
   setm.querySelectorAll('[data-m]').forEach(btn => btn.onclick = async () => {
     const m = btn.dataset.m; if (m === cfg.mode) return;
@@ -841,8 +916,14 @@ async function teacher(code) {
     await saveCfg({ groups: gs }); renderSet(); gsoon();
   };
   const renderSet = () => {
-    setm.querySelectorAll('[data-bg]').forEach(b => b.classList.toggle('on', cfg.bg.type === b.dataset.bg));
-    $('#bgl').classList.toggle('on', cfg.bg.type === 'image');
+    const eSl = cfg.slides.find(q => q.id === editId) || cfg.slides[0], eb = eSl.bg;
+    $('#bgh').textContent = 'Achtergrond van slide ' + (cfg.slides.indexOf(eSl) + 1);
+    setm.querySelectorAll('[data-bg]').forEach(b => b.classList.toggle('on', eb.type === b.dataset.bg));
+    $('#bgl').classList.toggle('on', eb.type === 'image');
+    $('#slst').innerHTML = cfg.slides.map((q, i) => `<div class="slr${q.id === editId ? ' edit' : ''}" data-sl="${q.id}"><canvas></canvas>
+      <span class="sln"><span><b>Slide ${i + 1}</b>${q.id === cfg.cur ? '<em>live</em>' : ''}</span><small>${BGN[q.bg.type] || ''}</small></span>
+      <span class="slb"><button data-live="${q.id}" title="Nu aan de leerlingen tonen">▶</button><button data-up="${q.id}" title="Naar voren">▲</button><button data-dn="${q.id}" title="Naar achteren">▼</button><button data-sdel="${q.id}" title="Slide verwijderen">🗑</button></span></div>`).join('');
+    $('#slst').querySelectorAll('[data-sl]').forEach(el => { const q = cfg.slides.find(x => x.id === el.dataset.sl); render(el.querySelector('canvas'), 96, { dm: DIM.individual, bg: q.bg, img: imgs[q.id], layers: [] }); });
     setm.querySelectorAll('[data-m]').forEach(b => b.classList.toggle('on', cfg.mode === b.dataset.m));
     $('#grpset').hidden = cfg.mode === 'individual';
     if (cfg.mode === 'individual') return;
@@ -859,20 +940,136 @@ async function teacher(code) {
     const c = e.target.closest('[data-id]'); if (c) { gsel = gsel === c.dataset.id ? null : c.dataset.id; renderSet(); return; }
     const t = e.target.closest('[data-to]'); if (t && gsel) { const id = gsel; gsel = null; await moveTo(id, t.dataset.to); renderSet(); }
   };
-  const openSet = () => {
-    setm.hidden = false;
-    if (cfg.bg.type === 'image' && bgImg) { pend = { img: bgImg, data: null, z: cfg.bg.z || 1, x: cfg.bg.x || 0, y: cfg.bg.y || 0 }; $('#bgz').min = Math.max(.1, Math.min(1, pend.z, zminOf(bgImg) * .5)); $('#bgz').value = pend.z; $('#bgimg').hidden = false; prev(); }
-    else if (!pend) $('#bgimg').hidden = true;
-    renderSet();
+  // ===== Slides: navigeren, beheren, exporteren/importeren, alle bordjes wissen =====
+  const loadRows = async () => {
+    const { data: rows } = await sb.from('boards').select('student,name,data,updated_at').eq('code', code).eq('slide', cfg.cur);
+    (rows || []).forEach(setU); ui();
+  };
+  const pg = document.createElement('div'); pg.id = 'pager';
+  pg.innerHTML = '<button id="pp" title="Vorige slide (←)">◀</button><span id="pn"></span><button id="pnx" title="Volgende slide (→)">▶</button><span class="pgs"></span><button id="pwipe" title="Alle wisbordjes op deze slide wissen">🧹</button>';
+  document.body.append(pg);
+  const pager = () => {
+    const i = cfg.slides.findIndex(q => q.id === cfg.cur);
+    $('#pn').textContent = 'Slide ' + (i + 1) + ' / ' + cfg.slides.length;
+    $('#pp').disabled = i <= 0; $('#pnx').disabled = i >= cfg.slides.length - 1;
+  };
+  const curChanged = async () => {
+    const sl = cfg.slides.find(q => q.id === cfg.cur) || cfg.slides[0];
+    cfg.bg = sl.bg; ENV.bg = sl.bg; bgImg = ENV.img = null;
+    Object.keys(all).forEach(k => { delete all[k]; delete users[k]; }); seen.clear();
+    Object.keys(els).forEach(k => delete els[k]); grid.innerHTML = ''; gsigc = ''; if (zoomId) closeZoom();
+    pager(); loadCurImg(); await loadRows(); applyMode();
+  };
+  const goSlide = async id => { if (id === cfg.cur || !cfg.slides.some(q => q.id === id)) return; await saveCfg({ cur: id }); await curChanged(); renderSet(); };
+  const step = d => { const i = cfg.slides.findIndex(q => q.id === cfg.cur) + d; if (i >= 0 && i < cfg.slides.length) goSlide(cfg.slides[i].id); };
+  $('#pp').onclick = () => step(-1); $('#pnx').onclick = () => step(1);
+  document.addEventListener('keydown', e => {
+    if (!setm.hidden || !zoom.hidden || /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '')) return;
+    if (e.key === 'ArrowRight') step(1); if (e.key === 'ArrowLeft') step(-1);
+  });
+  $('#pwipe').onclick = async () => { // alle bordjes van alle leerlingen op deze slide wissen
+    if (!confirm('Alle wisbordjes van alle leerlingen op deze slide wissen?')) return;
+    await sb.from('boards').delete().eq('code', code).eq('slide', cfg.cur);
+    await saveCfg({ wipes: { ...cfg.wipes, [cfg.cur]: (cfg.wipes[cfg.cur] || 0) + 1 } });
+    Object.keys(all).forEach(k => { delete all[k]; delete users[k]; seen.delete(k); });
+    applyMode();
+  };
+  const showEditBg = async () => {
+    pend = null; $('#bgimg').hidden = true;
+    const sl = cfg.slides.find(q => q.id === editId);
+    if (sl && sl.bg.type === 'image') {
+      const im = await loadImg(editId);
+      if (im) { pend = { img: im, data: null, z: sl.bg.z || 1, x: sl.bg.x || 0, y: sl.bg.y || 0 }; $('#bgz').min = Math.max(.1, Math.min(1, pend.z, zminOf(im) * .5)); $('#bgz').value = pend.z; $('#bgimg').hidden = false; prev(); }
+    }
+  };
+  const moveSlide = async (id, d) => {
+    const a = [...cfg.slides], i = a.findIndex(q => q.id === id), j = i + d;
+    if (j < 0 || j >= a.length) return;
+    [a[i], a[j]] = [a[j], a[i]]; await saveCfg({ slides: a }); pager(); renderSet();
+  };
+  const delSlide = async id => {
+    if (cfg.slides.length < 2) return alert('Er moet minstens één slide overblijven.');
+    if (!confirm('Deze slide en alle bordjes erop verwijderen?')) return;
+    const idx = cfg.slides.findIndex(q => q.id === id), slides = cfg.slides.filter(q => q.id !== id), wasCur = id === cfg.cur;
+    await sb.from('boards').delete().eq('code', code).eq('slide', id);
+    await sb.from('bgimages').delete().eq('code', code).eq('slide', id);
+    const wipes = { ...cfg.wipes }; delete wipes[id]; delete imgs[id];
+    const p = { slides, wipes }; if (wasCur) p.cur = slides[Math.min(idx, slides.length - 1)].id;
+    await saveCfg(p);
+    if (editId === id) editId = cfg.cur;
+    if (wasCur) await curChanged();
+    await showEditBg(); pager(); renderSet();
+  };
+  $('#sladd').onclick = async () => {
+    const n = { id: newId(), bg: { type: 'white' } };
+    await saveCfg({ slides: [...cfg.slides, n] }); editId = n.id; await showEditBg(); pager(); renderSet();
+  };
+  $('#slst').onclick = async e => {
+    const row = e.target.closest('[data-sl]'); if (!row) return;
+    const id = row.dataset.sl, t = e.target.closest('button');
+    if (t && t.dataset.live) return goSlide(id);
+    if (t && t.dataset.up) return moveSlide(id, -1);
+    if (t && t.dataset.dn) return moveSlide(id, 1);
+    if (t && t.dataset.sdel) return delSlide(id);
+    editId = id; await showEditBg(); renderSet();
+  };
+  // Exporteren: alleen aantal slides + achtergronden (geen leerlingwerk)
+  $('#slexp').onclick = async () => {
+    const out = [];
+    for (const q of cfg.slides) {
+      const o = { bg: { ...q.bg } }; delete o.bg.v;
+      if (q.bg.type === 'image') {
+        const { data } = await sb.from('bgimages').select('data').eq('code', code).eq('slide', q.id).maybeSingle();
+        if (data) o.image = data.data; else o.bg = { type: 'white' };
+      }
+      out.push(o);
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify({ app: 'wisbordjes', version: 1, slides: out })], { type: 'application/json' }));
+    a.download = 'wisbordjes-slides-' + String(ses.name || code).replace(/[^\w-]+/g, '_') + '.json';
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+  };
+  $('#slimp').onchange = async e => {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    let d; try { d = JSON.parse(await f.text()); } catch { return alert('Dit is geen geldig bestand.'); }
+    if (!d || d.app !== 'wisbordjes' || !Array.isArray(d.slides) || !d.slides.length) return alert('Dit bestand bevat geen wisbordjes-slides.');
+    const replace = $('#slmode').value === 'replace';
+    if (replace && !confirm('De huidige slides en alle bordjes vervangen door de ' + d.slides.length + ' geïmporteerde slides?')) return;
+    const okT = ['white', 'lines', 'grid', 'dots', 'image'], add = [];
+    for (const x of d.slides.slice(0, 50)) {
+      const xb = (x && x.bg) || {}, t = okT.includes(xb.type) ? xb.type : 'white', n = { id: newId(), bg: { type: t } };
+      if (t === 'image') {
+        if (typeof x.image === 'string' && x.image.startsWith('data:image/') && x.image.length < 1900000) {
+          const { error } = await sb.from('bgimages').upsert({ code, slide: n.id, data: x.image });
+          if (error) { alert('Een afbeelding importeren mislukte: ' + error.message); n.bg = { type: 'white' }; }
+          else n.bg = { type: 'image', z: Math.min(3, Math.max(.1, +xb.z || 1)), x: Number.isFinite(+xb.x) ? +xb.x : 0, y: Number.isFinite(+xb.y) ? +xb.y : 0, v: Date.now() };
+        } else n.bg = { type: 'white' };
+      }
+      add.push(n);
+    }
+    if (replace) {
+      const old = cfg.slides.map(q => q.id);
+      await sb.from('boards').delete().eq('code', code).in('slide', old);
+      await sb.from('bgimages').delete().eq('code', code).in('slide', old);
+      Object.keys(imgs).forEach(k => delete imgs[k]);
+      await saveCfg({ slides: add, cur: add[0].id, wipes: {} }); editId = cfg.cur;
+      await curChanged();
+    } else {
+      await saveCfg({ slides: [...cfg.slides, ...add] }); editId = add[0].id;
+    }
+    await showEditBg(); pager(); renderSet();
+  };
+  const openSet = async () => {
+    setm.hidden = false; editId = cfg.cur;
+    renderSet(); await Promise.all(cfg.slides.filter(q => q.bg.type === 'image').map(q => loadImg(q.id)));
+    await showEditBg(); renderSet();
   };
   $('#gear').onclick = openSet;
   setm.onclick = e => { if (e.target === setm || e.target.id === 'sx') setm.hidden = true; };
   document.addEventListener('keydown', e => { if (e.key === 'Escape') setm.hidden = true; });
-  loadBgImg(); applyMode();
+  loadCurImg(); applyMode(); pager();
 
-  const { data: rows } = await sb.from('boards').select('student,name,data,updated_at').eq('code', code);
-  (rows || []).forEach(setU);
-  ui();
+  await loadRows();
 
   const ch = sb.channel('wb:' + code);
   ch.on('presence', { event: 'sync' }, () => {
@@ -880,9 +1077,9 @@ async function teacher(code) {
     for (const k in s) online[k] = s[k][s[k].length - 1];
     ready = true; Object.keys(all).forEach(sync); gsoon(); ui();
   })
-  .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => setU(p.new))
-  .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => setU(p.new))
-  .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'boards' }, p => { if (p.old && p.old.code === code) drop(p.old.student); })
+  .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => { if (p.new.slide === cfg.cur) setU(p.new); })
+  .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => { if (p.new.slide === cfg.cur) setU(p.new); })
+  .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'boards' }, p => { if (p.old && p.old.code === code && (!p.old.slide || p.old.slide === cfg.cur)) drop(p.old.student); })
   .subscribe();
 }
 
