@@ -248,8 +248,8 @@ function slidesOf(row) {
 const draw = (cv, b, w) => render(cv, w, { dm: ENV.dm, bg: ENV.bg, img: ENV.img, layers: [{ data: b }] });
 
 // ====== INSTELLEN: kopieer deze twee waarden uit Supabase (Project Settings > API) ======
-const SUPABASE_URL = 'https://JOUW-PROJECT.supabase.co';
-const SUPABASE_KEY = 'JOUW-PUBLISHABLE-KEY';
+const SUPABASE_URL = 'https://mrntifcakwmwdlywaqgt.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_Ji_-mqWB7EFTtvxxS3xTKA_XJNSEX1D';
 // ===========================================================================================
 
 const sb = (typeof supabase !== 'undefined' && !SUPABASE_URL.includes('JOUW-')) ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
