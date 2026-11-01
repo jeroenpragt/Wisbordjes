@@ -438,7 +438,7 @@ async function student(code) {
     const { list, cur: c0 } = slidesOf(row), n = $('#sn');
     n.hidden = list.length < 2; n.textContent = 'Slide ' + (list.indexOf(c0) + 1) + '/' + list.length;
   };
-  const clearBoard = () => { clearTimeout(timer); b.s.length = 0; b.t.length = 0; ls.s(bkey(slideId), b); hasBoard = false; apply(); redraw(); };
+  const clearBoard = () => { clearTimeout(timer); b.s.length = 0; b.t.length = 0; ls.s(bkey(slideId), b); apply(); redraw(); };
   // De docent gaat naar een andere slide: bord, achtergrond en groepsgenoten wisselen mee (zonder de pagina te herladen)
   const switchSlide = async (id, row) => {
     switching = true;
@@ -969,10 +969,13 @@ async function teacher(code) {
   });
   $('#pwipe').onclick = async () => { // alle bordjes van alle leerlingen op deze slide wissen
     if (!confirm('Alle wisbordjes van alle leerlingen op deze slide wissen?')) return;
-    await sb.from('boards').delete().eq('code', code).eq('slide', cfg.cur);
+    // Alleen de inhoud wissen: de bordjes blijven in het raster staan
+    const { error } = await sb.from('boards').update({ data: { s: [], t: [] } }).eq('code', code).eq('slide', cfg.cur);
+    if (error) return alert('Wissen mislukt: ' + error.message + ' (is update-wissen.sql uitgevoerd in Supabase?)');
     await saveCfg({ wipes: { ...cfg.wipes, [cfg.cur]: (cfg.wipes[cfg.cur] || 0) + 1 } });
-    Object.keys(all).forEach(k => { delete all[k]; delete users[k]; seen.delete(k); });
-    applyMode();
+    const now = new Date().toISOString();
+    Object.keys(all).forEach(k => { all[k] = { ...all[k], data: { s: [], t: [] }, ts: now }; sync(k); });
+    gsoon(); ui();
   };
   const showEditBg = async () => {
     pend = null; $('#bgimg').hidden = true;
