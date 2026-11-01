@@ -1000,11 +1000,13 @@ async function teacher(code) {
   $('#pwipe').onclick = async () => { // alle bordjes van alle leerlingen op deze slide wissen
     if (!confirm('Alle wisbordjes van alle leerlingen op deze slide wissen?')) return;
     // Alleen de inhoud wissen: de bordjes blijven in het raster staan
-    const { error } = await sb.from('boards').update({ data: { s: [], t: [] } }).eq('code', code).eq('slide', cfg.cur);
+    // Alleen leerlingen die nu in deze sessie zitten: oude bordjes van eerdere keren blijven onaangeroerd (en dus onzichtbaar)
+    const ids = Object.keys(users);
+    const { error } = ids.length ? await sb.from('boards').update({ data: { s: [], t: [] } }).eq('code', code).eq('slide', cfg.cur).in('student', ids) : {};
     if (error) return alert('Wissen mislukt: ' + error.message + ' (is update-wissen.sql uitgevoerd in Supabase?)');
     await saveCfg({ wipes: { ...cfg.wipes, [cfg.cur]: (cfg.wipes[cfg.cur] || 0) + 1 } });
     const now = new Date().toISOString();
-    Object.keys(all).forEach(k => { all[k] = { ...all[k], data: { s: [], t: [] }, ts: now }; sync(k); });
+    ids.forEach(k => { if (all[k]) { all[k] = { ...all[k], data: { s: [], t: [] }, ts: now }; sync(k); } });
     gsoon(); ui();
   };
   const showEditBg = async () => {
