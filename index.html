@@ -374,9 +374,23 @@ async function student(code) {
 
   // Aanwezigheid: tabblad verlaten zien docenten als uitroepteken
   const ch = sb.channel('wb:' + code, { config: { presence: { key: uid } } });
-  const away = () => document.hidden || !document.hasFocus();
-  const chk = () => joined && !blocked && ch.track({ name, away: away() });
-  document.addEventListener('visibilitychange', chk); addEventListener('blur', chk); addEventListener('focus', chk); addEventListener('pagehide', () => joined && !blocked && ch.track({ name, away: true }));
+  let lastSent = null, lastInput = 0;
+  // Weg = tabblad verborgen, of venster zonder focus (tenzij de leerling net op het bord klikte; sommige browsers melden focus te laat)
+  const away = () => document.hidden || (!document.hasFocus() && Date.now() - lastInput > 4000);
+  const chk = force => { // meldt de status alleen bij een wijziging, of altijd met force === true
+    if (!joined || blocked) return;
+    const a = away();
+    if (force !== true && lastSent === a) return;
+    lastSent = a;
+    Promise.resolve(ch.track({ name, away: a, ts: Date.now() })).then(r => { if (r && r !== 'ok') lastSent = null; }).catch(() => { lastSent = null; }); // mislukt? dan opnieuw proberen
+  };
+  const wake = () => { try { sb.realtime.connect(); } catch {} chk(); setTimeout(chk, 300); setTimeout(chk, 1500); }; // terug: verbinding herstellen en status doorgeven
+  document.addEventListener('visibilitychange', wake); addEventListener('focus', wake); addEventListener('pageshow', wake); addEventListener('online', wake);
+  addEventListener('blur', () => chk());
+  addEventListener('pagehide', () => { if (joined && !blocked) { lastSent = true; try { ch.track({ name, away: true, ts: Date.now() }); } catch {} } });
+  ['pointerdown', 'touchstart'].forEach(ev => addEventListener(ev, () => { lastInput = Date.now(); chk(); }, { passive: true, capture: true }));
+  setInterval(() => chk(), 1000);                          // vangnet: een gemist event herstelt binnen 1 seconde
+  setInterval(() => { if (!away()) chk(true); }, 15000);   // levensteken: aanwezig blijven melden
 
   // Toegang controleren
   const { data: ses } = await sb.from('sessions').select('*').eq('code', code).maybeSingle();
@@ -478,7 +492,7 @@ async function student(code) {
   const ejected = async () => {
     if (ejecting) return; ejecting = true;
     setBlock(KICK + ' Je wordt doorgestuurd naar het beginscherm…');
-    if (joined) ch.untrack();
+    if (joined) { ch.untrack(); lastSent = null; }
     await sb.from('kicked').delete().eq('code', code).eq('student', uid); // opnieuw meedoen mag weer
     try { Object.keys(localStorage).filter(k => k.startsWith('wb_board_' + code) || k.startsWith('wb_wipe_' + code)).forEach(k => localStorage.removeItem(k)); localStorage.removeItem('wb_name_' + code); } catch {}
     setTimeout(() => { location.href = location.pathname; }, 2500);
@@ -487,7 +501,7 @@ async function student(code) {
   // Bepaalt of de leerling mag tekenen; wordt aangeroepen bij elke wijziging van de sessie
   const apply = async () => {
     if (kicked) return ejected();
-    if (closed) { setBlock('De docent heeft de sessie gesloten. Je kunt niet meer tekenen.'); if (joined) ch.untrack(); return; }
+    if (closed) { setBlock('De docent heeft de sessie gesloten. Je kunt niet meer tekenen.'); if (joined) { ch.untrack(); lastSent = null; } return; }
     if (!hasBoard) {
       const { error } = await sb.from('boards').insert({ code, slide: slideId, student: uid, name, data: b });
       if (error && error.code !== '23505') return setBlock('Meedoen mislukt: ' + error.message, true);
@@ -503,7 +517,7 @@ async function student(code) {
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => gotRow(p.new))
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => gotRow(p.new))
     .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'boards' }, p => { if (p.old && p.old.code === code && (!p.old.slide || p.old.slide === slideId) && others[p.old.student]) { delete others[p.old.student]; redraw(); } })
-    .subscribe(s => { if (s === 'SUBSCRIBED') { joined = true; chk(); } });
+    .subscribe(s => { if (s === 'SUBSCRIBED') { joined = true; chk(true); } else lastSent = null; });
   apply();
   // vangnet: ook als een realtime-bericht gemist wordt, volgt de status binnen 10 seconden
   setInterval(async () => {
@@ -1077,13 +1091,16 @@ async function teacher(code) {
   const ch = sb.channel('wb:' + code);
   ch.on('presence', { event: 'sync' }, () => {
     online = {}; const s = ch.presenceState();
-    for (const k in s) online[k] = s[k][s[k].length - 1];
+    for (const k in s) online[k] = s[k].reduce((a, m) => (m.ts || 0) >= (a.ts || 0) ? m : a); // nieuwste melding wint (ook bij meerdere tabbladen/verbindingen)
     ready = true; Object.keys(all).forEach(sync); gsoon(); ui();
   })
   .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => { if (p.new.slide === cfg.cur) setU(p.new); })
   .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => { if (p.new.slide === cfg.cur) setU(p.new); })
   .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'boards' }, p => { if (p.old && p.old.code === code && (!p.old.slide || p.old.slide === cfg.cur)) drop(p.old.student); })
   .subscribe();
+  // Terug op dit tabblad: verbinding herstellen en gemiste wijzigingen ophalen
+  const wakeT = () => { try { sb.realtime.connect(); } catch {} if (document.visibilityState === 'visible') loadRows(); };
+  document.addEventListener('visibilitychange', wakeT); addEventListener('focus', wakeT); addEventListener('online', wakeT);
 }
 
 start();
