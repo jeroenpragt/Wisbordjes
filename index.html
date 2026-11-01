@@ -141,6 +141,8 @@ a:hover{text-decoration:underline}
 .tb a{white-space:nowrap}
 .code{padding:3px 9px;font-size:.95rem;letter-spacing:.08em}
 #cnt{white-space:nowrap}
+#cnt.bad{color:var(--red)}
+#cnt.bad::before{content:'⚠ '}
 .tpill{padding:5px 11px;font-size:.9rem;white-space:nowrap}
 #tmin{width:60px;padding:6px 8px}
 </style>
@@ -373,18 +375,18 @@ async function student(code) {
   addEventListener('resize', fit); fit();
 
   // Aanwezigheid: tabblad verlaten zien docenten als uitroepteken
-  const ch = sb.channel('wb:' + code, { config: { presence: { key: uid } } });
+  let ch = null, chSince = Date.now(), restart = null; // realtime-kanaal: wordt bij een hangende verbinding opnieuw opgebouwd
   let lastSent = null, lastInput = 0;
   // Weg = tabblad verborgen, of venster zonder focus (tenzij de leerling net op het bord klikte; sommige browsers melden focus te laat)
   const away = () => document.hidden || (!document.hasFocus() && Date.now() - lastInput > 4000);
   const chk = force => { // meldt de status alleen bij een wijziging, of altijd met force === true
-    if (!joined || blocked) return;
+    if (!ch || !joined || blocked) return;
     const a = away();
     if (force !== true && lastSent === a) return;
     lastSent = a;
     Promise.resolve(ch.track({ name, away: a, ts: Date.now() })).then(r => { if (r && r !== 'ok') lastSent = null; }).catch(() => { lastSent = null; }); // mislukt? dan opnieuw proberen
   };
-  const wake = () => { try { sb.realtime.connect(); } catch {} chk(); setTimeout(chk, 300); setTimeout(chk, 1500); }; // terug: verbinding herstellen en status doorgeven
+  const wake = () => { try { sb.realtime.connect(); } catch {} chk(); setTimeout(chk, 300); setTimeout(() => { chk(); if (restart && ch && ch.state !== 'joined') restart(); }, 1500); }; // terug: verbinding herstellen en status doorgeven
   document.addEventListener('visibilitychange', wake); addEventListener('focus', wake); addEventListener('pageshow', wake); addEventListener('online', wake);
   addEventListener('blur', () => chk());
   addEventListener('pagehide', () => { if (joined && !blocked) { lastSent = true; try { ch.track({ name, away: true, ts: Date.now() }); } catch {} } });
@@ -510,15 +512,29 @@ async function student(code) {
     setBlock(null); chk(); write();
   };
 
-  ch.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'kicked', filter: 'code=eq.' + code },
+  // Realtime-kanaal: aanwezigheid + live wijzigingen. Blijft de verbinding hangen, dan bouwen we hem opnieuw op.
+  const startChannel = () => {
+    if (ch) { try { sb.removeChannel(ch); } catch {} }
+    joined = false; lastSent = null; chSince = Date.now();
+    ch = sb.channel('wb:' + code, { config: { presence: { key: uid } } });
+    ch.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'kicked', filter: 'code=eq.' + code },
       p => { if (p.new.student === uid) { kicked = true; apply(); } })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sessions', filter: 'code=eq.' + code },
       p => { closed = !!p.new.closed; timerEnd = p.new.timer_end ? Date.parse(p.new.timer_end) : null; frozen = !!p.new.frozen_at; apply(); evalTimer(); refresh(); })
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => gotRow(p.new))
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => gotRow(p.new))
     .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'boards' }, p => { if (p.old && p.old.code === code && (!p.old.slide || p.old.slide === slideId) && others[p.old.student]) { delete others[p.old.student]; redraw(); } })
-    .subscribe(s => { if (s === 'SUBSCRIBED') { joined = true; chk(true); } else lastSent = null; });
+    .subscribe(s => {
+      if (s === 'SUBSCRIBED') { joined = true; chSince = Date.now(); chk(true); refresh(); if (mode !== 'individual') loadOthers(); } // ook na herverbinden alles bijwerken
+      else { joined = false; lastSent = null; }
+    });
+  };
+  restart = startChannel; startChannel();
   apply();
+  setInterval(() => { // bewaking: niet verbonden? even geduld, daarna een schone nieuwe verbinding
+    if (!ch || ch.state === 'joined') { chSince = Date.now(); return; }
+    if (Date.now() - chSince > (document.visibilityState === 'visible' ? 8000 : 20000)) startChannel();
+  }, 3000);
   // vangnet: ook als een realtime-bericht gemist wordt, volgt de status binnen 10 seconden
   setInterval(async () => {
     const { data } = await sb.from('sessions').select('*').eq('code', code).maybeSingle();
@@ -1088,18 +1104,32 @@ async function teacher(code) {
 
   await loadRows();
 
-  const ch = sb.channel('wb:' + code);
-  ch.on('presence', { event: 'sync' }, () => {
-    online = {}; const s = ch.presenceState();
-    for (const k in s) online[k] = s[k].reduce((a, m) => (m.ts || 0) >= (a.ts || 0) ? m : a); // nieuwste melding wint (ook bij meerdere tabbladen/verbindingen)
-    ready = true; Object.keys(all).forEach(sync); gsoon(); ui();
-  })
-  .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => { if (p.new.slide === cfg.cur) setU(p.new); })
-  .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => { if (p.new.slide === cfg.cur) setU(p.new); })
-  .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'boards' }, p => { if (p.old && p.old.code === code && (!p.old.slide || p.old.slide === cfg.cur)) drop(p.old.student); })
-  .subscribe();
+  // Realtime-kanaal (aanwezigheid + live borden); wordt opnieuw opgebouwd als de verbinding blijft hangen
+  let ch = null, chSince = Date.now();
+  const connUI = ok => { $('#cnt').classList.toggle('bad', !ok); };
+  const startCh = () => {
+    if (ch) { try { sb.removeChannel(ch); } catch {} }
+    chSince = Date.now();
+    const c = ch = sb.channel('wb:' + code);
+    c.on('presence', { event: 'sync' }, () => {
+      if (c !== ch) return;
+      online = {}; const s = c.presenceState();
+      for (const k in s) online[k] = s[k].reduce((a, m) => (m.ts || 0) >= (a.ts || 0) ? m : a); // nieuwste melding wint (ook bij meerdere tabbladen/verbindingen)
+      ready = true; Object.keys(all).forEach(sync); gsoon(); ui();
+    })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => { if (p.new.slide === cfg.cur) setU(p.new); })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'boards', filter: 'code=eq.' + code }, p => { if (p.new.slide === cfg.cur) setU(p.new); })
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'boards' }, p => { if (p.old && p.old.code === code && (!p.old.slide || p.old.slide === cfg.cur)) drop(p.old.student); })
+    .subscribe(st => { if (st === 'SUBSCRIBED') { chSince = Date.now(); connUI(true); loadRows(); } else connUI(false); });
+  };
+  startCh();
+  setInterval(() => {
+    if (ch.state === 'joined') { chSince = Date.now(); connUI(true); return; }
+    connUI(false);
+    if (Date.now() - chSince > (document.visibilityState === 'visible' ? 8000 : 20000)) startCh();
+  }, 3000);
   // Terug op dit tabblad: verbinding herstellen en gemiste wijzigingen ophalen
-  const wakeT = () => { try { sb.realtime.connect(); } catch {} if (document.visibilityState === 'visible') loadRows(); };
+  const wakeT = () => { try { sb.realtime.connect(); } catch {} if (document.visibilityState === 'visible') { loadRows(); setTimeout(() => { if (ch.state !== 'joined') startCh(); }, 1500); } };
   document.addEventListener('visibilitychange', wakeT); addEventListener('focus', wakeT); addEventListener('online', wakeT);
 }
 
