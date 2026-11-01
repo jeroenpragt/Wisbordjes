@@ -27,7 +27,7 @@ button#go,button#new{background:var(--green);border-color:var(--green);color:#ff
 button#go:hover,button#new:hover{background:#0fa377}
 #cl.on,#fz.on{background:var(--coral);border-color:var(--coral);box-shadow:0 4px 12px #ff6a5555}
 #cl.on:hover,#fz.on:hover{background:#f0553f}
-#fz{padding:8px 12px;font-size:1.05rem;line-height:1}
+#fz{padding:7px 10px;font-size:.95rem;line-height:1}
 button:disabled{opacity:.5;cursor:not-allowed}
 a{color:var(--primary);font-weight:600;text-decoration:none}
 a:hover{text-decoration:underline}
@@ -39,7 +39,7 @@ a:hover{text-decoration:underline}
 .row{display:flex;gap:8px;align-items:center}.row input{flex:1}
 .item{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;background:#f7f5ff}
 /* leerling */
-.st{height:100dvh;display:flex;flex-direction:column;padding:12px;gap:12px}
+.st{position:relative;height:100dvh;display:flex;flex-direction:column;padding:12px;gap:12px}
 .bar{display:flex;gap:8px;align-items:center;padding:10px 14px;flex-wrap:wrap;background:#fff;border-radius:18px;box-shadow:var(--sh)}
 .bar .sp{flex:1}
 .bar select{border-radius:999px;padding:8px 14px;font-weight:600}
@@ -108,6 +108,28 @@ a:hover{text-decoration:underline}
 .zm{display:flex;gap:4px}
 .cd .bdgs{display:flex;gap:6px;flex-wrap:wrap;padding:0 12px 12px}
 .hide .bn{visibility:hidden}
+#info{position:absolute;left:22px;top:86px;z-index:6;display:flex;gap:6px;align-items:center;flex-wrap:wrap;pointer-events:none;max-width:calc(100% - 44px)}
+#info small{background:rgba(255,255,255,.88);padding:3px 10px;border-radius:999px;font-weight:600;color:var(--mute);font-size:.8rem}
+#info .chips{background:rgba(255,255,255,.92);padding:4px 10px;border-radius:999px;box-shadow:var(--sh)}
+.tb b{max-width:150px;overflow:hidden;text-overflow:ellipsis}
+/* Compacte werkbalken: één rij op een scherm van 13 inch (knoppen ca. 10% kleiner) */
+.bar,.tb{flex-wrap:nowrap;gap:5px;padding:8px 12px;font-size:.9rem;overflow-x:auto;scrollbar-width:none}
+.bar::-webkit-scrollbar,.tb::-webkit-scrollbar{display:none}
+.bar>*,.tb>*{flex:none}
+.bar button,.tb button,.bar select,.tb .filebtn{font-size:.9rem;padding:7px 12px;white-space:nowrap}
+.bar select{padding:7px 10px}
+.bar .sw{width:24px;height:24px;padding:0}
+.bar .sws{gap:5px;padding:0 2px}
+.bar .sp{flex:1 1 4px;min-width:4px}
+.bar>small{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.8rem}
+.bar .chips,.tb .tm{flex-wrap:nowrap}
+.bar .bdg{padding:2px 8px;font-size:.8rem}
+.tb b{font-size:1rem;white-space:nowrap}
+.tb a{white-space:nowrap}
+.code{padding:3px 9px;font-size:.95rem;letter-spacing:.08em}
+#cnt{white-space:nowrap}
+.tpill{padding:5px 11px;font-size:.9rem;white-space:nowrap}
+#tmin{width:60px;padding:6px 8px}
 </style>
 </head>
 <body>
@@ -293,9 +315,10 @@ async function student(code) {
     <span class="zm" id="zm" hidden><button class="keep" id="zo" title="Uitzoomen">−</button><button class="keep" id="zf" title="Passend">⊡</button><button class="keep" id="zi" title="Inzoomen">+</button></span>
     <span class="sws">${SW.map((c, i) => `<button class="sw${i ? '' : ' sel'}" data-c="${c}" style="background:${c}" title="Kleur"></button>`).join('')}<label class="sw plus" title="Eigen kleur">+<input type="color" id="col" value="#1f2340"></label></span>
     <select id="sz"><option value="3">Dun</option><option value="6" selected>Middel</option><option value="12">Dik</option></select>
-    <button id="undo">↶</button><button id="clr">Alles wissen</button>
-    <span id="tpill" class="tpill" hidden></span><span id="grp" class="chips" hidden></span>
-    <span class="sp"></span><small>${esc(name)} · ${esc(code)}</small><button id="fs">⛶ Volledig scherm</button></div>
+    <button id="undo">↶</button><button id="clr" title="Alles wissen">🗑 Alles</button>
+    <span id="tpill" class="tpill" hidden></span>
+    <span class="sp"></span><button id="fs" title="Volledig scherm" aria-label="Volledig scherm">⛶</button></div>
+    <div id="info"><small>${esc(name)} · ${esc(code)}</small><span id="grp" class="chips" hidden></span></div>
     <div id="wrap"><div id="box"><canvas id="cv"></canvas></div></div></div>
     <div id="msg">Verbinden…</div>`;
   const cv = $('#cv'), box = $('#box'), msg = $('#msg');
@@ -513,7 +536,7 @@ async function student(code) {
   const reqFs = de.requestFullscreen || de.webkitRequestFullscreen, exitFs = document.exitFullscreen || document.webkitExitFullscreen;
   const isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
   if (!reqFs) fsBtn.hidden = true; // bv. iPhone ondersteunt dit niet
-  const upFs = () => { fsBtn.textContent = isFs() ? '⤡ Volledig scherm sluiten' : '⛶ Volledig scherm'; fit(); };
+  const upFs = () => { fsBtn.textContent = isFs() ? '⤡' : '⛶'; fsBtn.title = isFs() ? 'Volledig scherm sluiten' : 'Volledig scherm'; fit(); };
   fsBtn.onclick = () => { try { const r = isFs() ? exitFs.call(document) : reqFs.call(de); r && r.catch && r.catch(() => {}); } catch {} };
   document.addEventListener('fullscreenchange', upFs); document.addEventListener('webkitfullscreenchange', upFs);
   $('#undo').onclick = () => { if (locked) return; (b.s.length ? b.s : b.t).pop(); redraw(); save(); };
@@ -531,10 +554,10 @@ async function teacher(code) {
   ENV.bg = cfg.bg; ENV.dm = DIM.individual; ENV.img = null;
   let bgImg = null, gsel = null, gsigc = '', gt = 0;
 
-  app.innerHTML = `<div class="tb"><a href="./">← Sessies</a><b>${esc(ses.name)}</b>
-    <span class="code">${code}</span><button id="cp">Link kopiëren</button>
+  app.innerHTML = `<div class="tb"><a href="./" title="Terug naar je sessies">←</a><b>${esc(ses.name)}</b>
+    <span class="code">${code}</span><button id="cp" title="Leerlinglink kopiëren">🔗 Link</button>
     <button id="h"></button><button id="sh"></button><button id="cl"></button><button id="fz">🔓</button><button id="gear" aria-label="Instellingen" title="Instellingen">⚙️</button><button id="rv" hidden></button>
-    <span class="tm"><input id="tmin" type="number" min="0.5" step="0.5" max="180" value="${ls.g('wb_tmin') || 5}" title="Minuten"><button id="tgo">⏱ Start timer</button><span id="tpill" class="tpill" hidden></span><button id="tx" title="Timer wegklikken" hidden>✕</button></span>
+    <span class="tm"><input id="tmin" type="number" min="0.5" step="0.5" max="180" value="${ls.g('wb_tmin') || 5}" title="Minuten"><button id="tgo">⏱ Start</button><span id="tpill" class="tpill" hidden></span><button id="tx" title="Timer wegklikken" hidden>✕</button></span>
     <span id="cnt"></span></div><div id="grid"></div>`;
   const grid = $('#grid');
   // Afschermen: tijdens de timer altijd, na de timer nooit, anders volgens de knop
@@ -564,14 +587,15 @@ async function teacher(code) {
   const ui = () => {
     if (zoomId) { if (eff()) closeZoom(); else zdraw(); }
     grid.classList.toggle('hide', st.hide); grid.classList.toggle('shield', eff());
-    $('#h').classList.toggle('on', st.hide); $('#h').textContent = st.hide ? 'Namen tonen' : 'Namen verbergen';
+    $('#h').classList.toggle('on', st.hide); $('#h').textContent = '🙈 Namen'; $('#h').title = st.hide ? 'Namen tonen' : 'Namen verbergen';
     $('#sh').classList.toggle('on', st.shield); $('#sh').disabled = timerEnd !== null;
     const fz = $('#fz'), ft = frozen ? 'Wisbordjes ontgrendelen' : 'Wisbordjes vergrendelen (leerlingen kunnen niet tekenen)';
     fz.classList.toggle('on', frozen); fz.textContent = frozen ? '🔒' : '🔓'; fz.disabled = timerEnd !== null;
-    fz.title = ft; fz.setAttribute('aria-label', ft); $('#sh').textContent = st.shield ? 'Wisbordjes tonen' : 'Wisbordjes afschermen';
-    $('#cl').classList.toggle('on', st.closed); $('#cl').textContent = st.closed ? 'Sessie openen' : 'Sessie sluiten';
+    fz.title = ft; fz.setAttribute('aria-label', ft); $('#sh').textContent = '🛡 Afschermen'; $('#sh').title = st.shield ? 'Wisbordjes tonen' : 'Wisbordjes afschermen';
+    $('#cl').classList.toggle('on', st.closed); $('#cl').textContent = st.closed ? '▶ Openen' : '⏹ Sluiten'; $('#cl').title = st.closed ? 'Sessie weer openen' : 'Sessie sluiten';
     const n = Object.keys(users).length, ng = cfg.groups.length;
-    $('#cnt').textContent = n + ' leerling' + (n === 1 ? '' : 'en') + (cfg.mode === 'individual' ? '' : ' · ' + ng + ' groep' + (ng === 1 ? '' : 'en'));
+    $('#cnt').textContent = '👥 ' + n + (cfg.mode === 'individual' ? '' : ' · ' + ng + ' gr.');
+    $('#cnt').title = n + ' leerling' + (n === 1 ? '' : 'en') + (cfg.mode === 'individual' ? '' : ' in ' + ng + ' groep' + (ng === 1 ? '' : 'en'));
     if (cfg.mode !== 'individual') gsoon();
     if (!setm.hidden) rsoon();
   };
@@ -584,7 +608,7 @@ async function teacher(code) {
   };
   $('#cp').onclick = () => {
     try { navigator.clipboard.writeText(location.origin + location.pathname + '?s=' + code); } catch {}
-    $('#cp').textContent = 'Gekopieerd!'; setTimeout(() => $('#cp').textContent = 'Link kopiëren', 1500);
+    $('#cp').textContent = '✓ Gekopieerd'; setTimeout(() => $('#cp').textContent = '🔗 Link', 1500);
   };
 
   const hide = id => { if (zoomId === id) closeZoom(); delete users[id]; els[id] && els[id].remove(); delete els[id]; };
@@ -640,7 +664,7 @@ async function teacher(code) {
     pill.hidden = $('#tx').hidden = left === null;
     pill.classList.toggle('done', left !== null && left <= 0);
     if (left !== null) pill.textContent = left > 0 ? '⏱ ' + fmt(left) : '⏱ Tijd is om!';
-    $('#tgo').textContent = left === null ? '⏱ Start timer' : '↻ Opnieuw starten';
+    $('#tgo').textContent = left === null ? '⏱ Start' : '↻'; $('#tgo').title = left === null ? 'Timer starten' : 'Timer opnieuw starten (bordjes weer vrij)';
     const run = left !== null && left > 0;
     if (run !== wasRun) { wasRun = run; if (!run && left !== null) beep(); ui(); }
   };
@@ -713,7 +737,7 @@ async function teacher(code) {
   const applyMode = () => {
     Object.keys(els).forEach(k => delete els[k]); grid.innerHTML = ''; gsigc = '';
     $('#rv').hidden = cfg.mode !== 'placemat';
-    $('#rv').textContent = cfg.reveal ? '🙈 Placemat weer verbergen' : '👁 Placemat vrijgeven'; $('#rv').classList.toggle('on', cfg.reveal);
+    $('#rv').textContent = cfg.reveal ? '🙈 Verbergen' : '👁 Vrijgeven'; $('#rv').title = cfg.reveal ? 'Placemat weer verbergen' : 'Placemat vrijgeven'; $('#rv').classList.toggle('on', cfg.reveal);
     if (cfg.mode === 'individual') Object.keys(all).forEach(sync); else gsoon();
     ui();
   };
@@ -727,7 +751,7 @@ async function teacher(code) {
     <div class="pills" id="bgp"><button data-bg="white">Wit</button><button data-bg="lines">Lijntjes</button><button data-bg="grid">Ruitjes 1×1 cm</button><button data-bg="dots">Bullet journal</button>
       <label class="filebtn" id="bgl">🖼️ Afbeelding…<input type="file" id="bgf" accept="image/*" hidden></label></div>
     <div id="bgimg" hidden><canvas id="bgprev"></canvas>
-      <div class="row"><span>Zoom</span><input id="bgz" type="range" min="1" max="3" step="0.05" value="1"><button id="bgok" class="on">Toepassen</button></div>
+      <div class="row"><span>Zoom</span><input id="bgz" type="range" min="0.2" max="3" step="0.01" value="1"><button id="bgfit" title="De hele afbeelding in beeld">Passend</button><button id="bgfill" title="Het hele bord vullen">Vullen</button><button id="bgok" class="on">Toepassen</button></div>
       <small>Sleep de afbeelding om hem te verplaatsen. De preview heeft de verhouding van het wisbordje.</small></div>
     <h3>Werkvorm</h3>
     <div class="pills" id="modep"><button data-m="individual">Individueel</button><button data-m="groups">Break-out groepen</button><button data-m="placemat">Placemat</button></div>
@@ -738,6 +762,9 @@ async function teacher(code) {
   document.body.append(setm);
   let pend = null, dragp = null;
   const prevCv = $('#bgprev');
+  // zoom 1 = bord gevuld; kleiner dan 1 laat de hele afbeelding zien (staande foto op liggend bord)
+  const zminOf = im => { const a = DIM.individual[0] / im.width, c = DIM.individual[1] / im.height; return Math.min(a, c) / Math.max(a, c); };
+  const setZ = v => { pend.z = v; $('#bgz').value = v; prev(); };
   const prev = () => { if (pend) render(prevCv, 560, { dm: DIM.individual, bg: { type: 'image', z: pend.z, x: pend.x, y: pend.y }, img: pend.img, layers: [] }); };
   prevCv.onpointerdown = e => { if (pend) { dragp = [e.clientX, e.clientY]; prevCv.setPointerCapture(e.pointerId); } };
   prevCv.onpointermove = e => {
@@ -745,6 +772,8 @@ async function teacher(code) {
     pend.x += (e.clientX - dragp[0]) / r.width; pend.y += (e.clientY - dragp[1]) / r.height; dragp = [e.clientX, e.clientY]; prev();
   };
   prevCv.onpointerup = () => { dragp = null; };
+  $('#bgfit').onclick = () => { if (pend) { pend.x = pend.y = 0; setZ(zminOf(pend.img)); } };
+  $('#bgfill').onclick = () => { if (pend) { pend.x = pend.y = 0; setZ(1); } };
   $('#bgz').oninput = e => { if (pend) { pend.z = +e.target.value; prev(); } };
   $('#bgf').onchange = e => {
     const f = e.target.files[0]; if (!f) return;
@@ -754,7 +783,7 @@ async function teacher(code) {
       c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
       x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0, c.width, c.height);
       const data = c.toDataURL('image/jpeg', .8), im2 = new Image();
-      im2.onload = () => { pend = { img: im2, data, z: 1, x: 0, y: 0 }; $('#bgz').value = 1; $('#bgimg').hidden = false; prev(); };
+      im2.onload = () => { const zm = zminOf(im2); pend = { img: im2, data, z: 1, x: 0, y: 0 }; $('#bgz').min = Math.max(.1, Math.min(1, zm * .5)); $('#bgimg').hidden = false; setZ(im2.height > im2.width ? zm : 1); };
       im2.src = data; URL.revokeObjectURL(url);
     };
     im.src = url; e.target.value = '';
@@ -832,7 +861,7 @@ async function teacher(code) {
   };
   const openSet = () => {
     setm.hidden = false;
-    if (cfg.bg.type === 'image' && bgImg) { pend = { img: bgImg, data: null, z: cfg.bg.z || 1, x: cfg.bg.x || 0, y: cfg.bg.y || 0 }; $('#bgz').value = pend.z; $('#bgimg').hidden = false; prev(); }
+    if (cfg.bg.type === 'image' && bgImg) { pend = { img: bgImg, data: null, z: cfg.bg.z || 1, x: cfg.bg.x || 0, y: cfg.bg.y || 0 }; $('#bgz').min = Math.max(.1, Math.min(1, pend.z, zminOf(bgImg) * .5)); $('#bgz').value = pend.z; $('#bgimg').hidden = false; prev(); }
     else if (!pend) $('#bgimg').hidden = true;
     renderSet();
   };
