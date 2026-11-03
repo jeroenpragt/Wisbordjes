@@ -116,6 +116,10 @@ a:hover{text-decoration:underline}
 #pager span{font-weight:700;padding:0 6px;white-space:nowrap}
 #pager .pgs{width:1px;height:22px;background:var(--line);padding:0}
 #grid{padding-bottom:84px}
+#memlist{display:flex;flex-direction:column;gap:6px;max-height:240px;overflow:auto}
+.mem{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;border:1.5px solid var(--line);border-radius:12px}
+.mem small{color:var(--mute);margin-left:6px}
+.mem button{padding:4px 9px}
 #slst{display:flex;flex-direction:column;gap:6px}
 .slr{display:flex;align-items:center;gap:10px;padding:6px 8px;border:1.5px solid var(--line);border-radius:12px;cursor:pointer}
 .slr.edit{border-color:var(--primary);background:#f4f2ff}
@@ -256,6 +260,9 @@ const SUPABASE_KEY = 'sb_publishable_Ji_-mqWB7EFTtvxxS3xTKA_XJNSEX1D';
 
 const sb = (typeof supabase !== 'undefined' && !SUPABASE_URL.includes('JOUW-')) ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 const qs = new URLSearchParams(location.search);
+const forgetLocal = code => { // alles wat deze browser over deze sessie onthoudt (naam, borden)
+  try { const re = new RegExp('^wb_(name|board|wipe|epoch)_' + code + '(_|$)'); Object.keys(localStorage).filter(k => re.test(k)).forEach(k => localStorage.removeItem(k)); } catch {}
+};
 const cleanCode = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
 const fatal = t => { app.innerHTML = `<div class="c"><div class="card">${t}</div></div>`; };
 let uid = null, skew = 0;
@@ -287,19 +294,13 @@ async function start() {
 async function home() {
   app.innerHTML = `<div class="c"><h1>Wisbordjes</h1>
   <div class="card"><h2>Leerling</h2>
-    <input id="n" placeholder="Je naam" maxlength="30">
-    <input id="k" placeholder="Sessiecode" maxlength="8" style="text-transform:uppercase">
-    <button id="go" class="on">Meedoen</button></div>
+    <input id="k" placeholder="Sessiecode" maxlength="8" style="text-transform:uppercase" autocomplete="off">
+    <button id="go" class="on">Verder</button></div>
   <div class="card"><h2>Docent</h2>
     <div class="row"><input id="sn" placeholder="Naam sessie, bijv. klas 2A"><button id="new" class="on">Start sessie</button></div>
     <div id="list">Laden…</div></div></div>`;
-  const n = $('#n'), k = $('#k');
-  k.oninput = () => { const v = ls.g('wb_name_' + cleanCode(k.value)); if (v) n.value = v; };
-  $('#go').onclick = () => {
-    const c = cleanCode(k.value), nm = n.value.trim();
-    if (!c || !nm) return;
-    ls.s('wb_name_' + c, nm); location.href = '?s=' + c;
-  };
+  const k = $('#k'), go = () => { const c = cleanCode(k.value); if (c) location.href = '?s=' + c; };
+  $('#go').onclick = go; k.onkeydown = e => { if (e.key === 'Enter') go(); };
   $('#new').onclick = async () => {
     const name = $('#sn').value.trim() || 'Nieuwe sessie';
     for (let i = 0; i < 5; i++) {
@@ -317,11 +318,26 @@ async function home() {
 }
 
 /* ---------- Leerling ---------- */
-async function student(code) {
-  const name = ls.g('wb_name_' + code);
+async function student(code, fresh) {
+  let name = ls.g('wb_name_' + code), mem = null;
+  // Staat deze leerling nog in de lijst van de docent? Zo niet (verwijderd), dan opnieuw de naam vragen.
+  if (!fresh) {
+    const r = await sb.from('members').select('name').eq('code', code).eq('student', uid).maybeSingle();
+    if (!r.error) {
+      mem = r.data;
+      if (name && !mem) { forgetLocal(code); name = null; }
+      else if (!name && mem) { name = mem.name; ls.s('wb_name_' + code, name); }
+    }
+  }
   if (!name) {
-    app.innerHTML = `<div class="c"><div class="card"><h2>Sessie ${esc(code)}</h2><input id="n" placeholder="Je naam" maxlength="30"><button id="go" class="on">Meedoen</button></div></div>`;
-    $('#go').onclick = () => { const v = $('#n').value.trim(); if (v) { ls.s('wb_name_' + code, v); student(code); } };
+    app.innerHTML = `<div class="c"><div class="card"><h2>Sessie ${esc(code)}</h2><label for="n">Wat is je naam?</label><input id="n" placeholder="Je naam" maxlength="30" autocomplete="off"><button id="go" class="on">Meedoen</button><a href="./">← Andere code</a></div></div>`;
+    const submit = async () => {
+      const v = $('#n').value.trim(); if (!v) return;
+      ls.s('wb_name_' + code, v);
+      await sb.from('members').insert({ code, student: uid, name: v }); // onthouden bij de docent
+      student(code, true);
+    };
+    $('#go').onclick = submit; $('#n').onkeydown = e => { if (e.key === 'Enter') submit(); }; $('#n').focus();
     return;
   }
   const b = { s: [], t: [] };
@@ -402,6 +418,11 @@ async function student(code) {
   const loc0 = ls.g(bkey(slideId)); if (loc0) { b.s = loc0.s || []; b.t = loc0.t || []; }
   const { data: own } = await sb.from('boards').select('data').eq('code', code).eq('slide', slideId).eq('student', uid).maybeSingle();
   let closed = ses.closed, kicked = !!kk, hasBoard = !!own;
+  // Onthouden dat deze leerling in de sessie zit (de docent ziet deze lijst en kan leerlingen verwijderen)
+  if (!kicked && (!closed || mem)) {
+    if (mem) await sb.from('members').update({ name, last_seen: new Date().toISOString() }).eq('code', code).eq('student', uid);
+    else await sb.from('members').insert({ code, student: uid, name });
+  }
   timerEnd = ses.timer_end ? Date.parse(ses.timer_end) : null; frozen = !!ses.frozen_at;
   // Werkvorm gewisseld door de docent (epoch): oud bord weg
   const ek = 'wb_epoch_' + code, epochReset = (ls.g(ek) || 0) !== (ses.epoch || 0);
@@ -721,6 +742,7 @@ async function teacher(code) {
         if (!confirm(users[id].name + ' verwijderen uit de sessie?')) return;
         await sb.from('kicked').insert({ code, student: id });
         await sb.from('boards').delete().eq('code', code).eq('student', id);
+        await sb.from('members').delete().eq('code', code).eq('student', id);
         drop(id);
       };
       el.querySelector('.z').onclick = () => openZoom(id);
@@ -854,7 +876,10 @@ async function teacher(code) {
     <div id="grpset" hidden>
       <div class="row"><select id="rmode"><option value="per">Leerlingen per groep</option><option value="n">Aantal groepen</option></select><input id="rnum" type="number" min="1" max="30" value="4"><button id="rgo" class="on">🎲 Willekeurig indelen</button></div>
       <div class="row"><button id="gadd">+ Groep</button><small>Klik op een leerling en daarna op een groep (of op "Niet ingedeeld") om te verplaatsen.</small></div>
-      <div id="gedit"></div></div></div>`;
+      <div id="gedit"></div></div>
+    <h3 id="memh">Opgeslagen leerlingen</h3>
+    <small>Alle leerlingen die ooit in deze sessie hebben meegedaan. Verwijder je iemand, dan moet die leerling de volgende keer opnieuw de naam invullen.</small>
+    <div id="memlist"></div></div>`;
   document.body.append(setm);
   let pend = null, dragp = null;
   const prevCv = $('#bgprev');
@@ -929,8 +954,9 @@ async function teacher(code) {
     if (!confirm(((users[id] || {}).name || 'Deze leerling') + ' verwijderen uit de sessie?')) return;
     await sb.from('kicked').insert({ code, student: id });
     await sb.from('boards').delete().eq('code', code).eq('student', id);
+    await sb.from('members').delete().eq('code', code).eq('student', id);
     await saveCfg({ groups: cfg.groups.map(g => ({ ...g, members: g.members.filter(m => m.id !== id) })) });
-    drop(id); renderSet();
+    drop(id); renderSet(); loadMembers();
   };
   $('#gadd').onclick = async () => { await saveCfg({ groups: [...cfg.groups, { id: 'g' + rnd(5), name: 'Groep ' + (cfg.groups.length + 1), members: [] }] }); renderSet(); gsoon(); };
   $('#rgo').onclick = async () => {
@@ -956,6 +982,7 @@ async function teacher(code) {
     $('#slst').querySelectorAll('[data-sl]').forEach(el => { const q = cfg.slides.find(x => x.id === el.dataset.sl); render(el.querySelector('canvas'), 96, { dm: DIM.individual, bg: q.bg, img: imgs[q.id], layers: [] }); });
     setm.querySelectorAll('[data-m]').forEach(b => b.classList.toggle('on', cfg.mode === b.dataset.m));
     $('#grpset').hidden = cfg.mode === 'individual';
+    renderMem();
     if (cfg.mode === 'individual') return;
     $('#rnum').max = cfg.mode === 'placemat' ? 4 : 30;
     const inG = new Set(cfg.groups.flatMap(g => g.members.map(m => m.id)));
@@ -1094,10 +1121,37 @@ async function teacher(code) {
     }
     await showEditBg(); pager(); renderSet();
   };
+  // Opgeslagen leerlingen: iedereen die ooit in deze sessie zat (ook zij die nu niet meedoen)
+  let memb = [], memErr = false;
+  const renderMem = () => {
+    const el = $('#memlist');
+    $('#memh').textContent = 'Opgeslagen leerlingen' + (memb.length ? ' (' + memb.length + ')' : '');
+    if (memErr) { el.innerHTML = '<small>Voer eerst update-leerlingen.sql uit in Supabase.</small>'; return; }
+    if (!memb.length) { el.innerHTML = '<small>Nog geen leerlingen opgeslagen.</small>'; return; }
+    el.innerHTML = memb.map(m => {
+      const nu = !!(users[m.student] || online[m.student]);
+      const wanneer = m.last_seen ? new Date(m.last_seen).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+      return `<div class="mem"><span><b>${esc(m.name)}</b><small>${nu ? '● nu in de sessie' : 'laatst gezien ' + wanneer}</small></span><button data-mem="${m.student}" title="Verwijderen">🗑</button></div>`;
+    }).join('');
+  };
+  const loadMembers = async () => {
+    const { data, error } = await sb.from('members').select('student,name,last_seen').eq('code', code).order('name');
+    memErr = !!error; memb = data || []; renderMem();
+  };
+  $('#memlist').onclick = async e => {
+    const t = e.target.closest('[data-mem]'); if (!t) return;
+    const id = t.dataset.mem, m = memb.find(x => x.student === id), nm = (m && m.name) || 'Deze leerling';
+    if (!confirm(nm + ' verwijderen uit de opgeslagen leerlingen? Bij de volgende keer moet deze leerling opnieuw de naam invullen.')) return;
+    if (online[id]) await sb.from('kicked').insert({ code, student: id }); // nu verbonden: meteen terug naar het beginscherm
+    await sb.from('boards').delete().eq('code', code).eq('student', id);
+    await sb.from('members').delete().eq('code', code).eq('student', id);
+    if (cfg.groups.some(g => g.members.some(q => q.id === id))) await saveCfg({ groups: cfg.groups.map(g => ({ ...g, members: g.members.filter(q => q.id !== id) })) });
+    drop(id); await loadMembers();
+  };
   const openSet = async () => {
     setm.hidden = false; editId = cfg.cur;
     renderSet(); await Promise.all(cfg.slides.filter(q => q.bg.type === 'image').map(q => loadImg(q.id)));
-    await showEditBg(); renderSet();
+    await showEditBg(); renderSet(); loadMembers();
   };
   $('#gear').onclick = openSet;
   setm.onclick = e => { if (e.target === setm || e.target.id === 'sx') setm.hidden = true; };
