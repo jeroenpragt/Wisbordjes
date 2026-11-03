@@ -119,6 +119,9 @@ a:hover{text-decoration:underline}
 #memlist{display:flex;flex-direction:column;gap:6px;max-height:240px;overflow:auto}
 .mem{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;border:1.5px solid var(--line);border-radius:12px}
 .mem small{color:var(--mute);margin-left:6px}
+.mem.off{opacity:.72;font-style:italic;background:#faf9ff}
+.mem.off b{font-weight:600}
+.memh2{font-weight:700;color:var(--mute);margin-top:6px}
 .mem button{padding:4px 9px}
 #slst{display:flex;flex-direction:column;gap:6px}
 .slr{display:flex;align-items:center;gap:10px;padding:6px 8px;border:1.5px solid var(--line);border-radius:12px;cursor:pointer}
@@ -1123,20 +1126,33 @@ async function teacher(code) {
   };
   // Opgeslagen leerlingen: iedereen die ooit in deze sessie zat (ook zij die nu niet meedoen)
   let memb = [], memErr = false;
+  const isActive = id => !!(users[id] || online[id]); // nu in het raster of verbonden
   const renderMem = () => {
     const el = $('#memlist');
     $('#memh').textContent = 'Opgeslagen leerlingen' + (memb.length ? ' (' + memb.length + ')' : '');
-    if (memErr) { el.innerHTML = '<small>Voer eerst update-leerlingen.sql uit in Supabase.</small>'; return; }
-    if (!memb.length) { el.innerHTML = '<small>Nog geen leerlingen opgeslagen.</small>'; return; }
-    el.innerHTML = memb.map(m => {
-      const nu = !!(users[m.student] || online[m.student]);
-      const wanneer = m.last_seen ? new Date(m.last_seen).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
-      return `<div class="mem"><span><b>${esc(m.name)}</b><small>${nu ? '● nu in de sessie' : 'laatst gezien ' + wanneer}</small></span><button data-mem="${m.student}" title="Verwijderen">🗑</button></div>`;
-    }).join('');
+    const when = m => m.last_seen ? new Date(m.last_seen).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'onbekend';
+    const row = (m, off) => `<div class="mem${off ? ' off' : ''}"><span><b>${esc(m.name)}</b><small>${off ? 'inactief · laatst gezien ' + when(m) : '● nu in de sessie'}</small></span><button data-mem="${m.student}" title="Verwijderen">🗑</button></div>`;
+    const act = memb.filter(m => isActive(m.student)), off = memb.filter(m => !isActive(m.student));
+    el.innerHTML = (memErr ? '<small>Voer update-leerlingen.sql uit in Supabase om leerlingen ook zonder bord te onthouden.</small>' : '')
+      + (act.length ? act.map(m => row(m, false)).join('') : '<small>Niemand actief in deze sessie.</small>')
+      + (off.length ? `<div class="memh2">Inactief (${off.length})</div>` + off.map(m => row(m, true)).join('') : '');
   };
+  // Iedereen die ooit hier meedeed: aangemelde leerlingen plus iedereen met een bord op een van de slides
   const loadMembers = async () => {
-    const { data, error } = await sb.from('members').select('student,name,last_seen').eq('code', code).order('name');
-    memErr = !!error; memb = data || []; renderMem();
+    const [mm, bb] = await Promise.all([
+      sb.from('members').select('student,name,last_seen').eq('code', code),
+      sb.from('boards').select('student,name,updated_at').eq('code', code)
+    ]);
+    memErr = !!mm.error;
+    const map = {};
+    (mm.data || []).forEach(r => { map[r.student] = { student: r.student, name: r.name, last_seen: r.last_seen }; });
+    (bb.data || []).forEach(r => {
+      const e = map[r.student];
+      if (!e) map[r.student] = { student: r.student, name: r.name, last_seen: r.updated_at };
+      else if (r.updated_at && (!e.last_seen || r.updated_at > e.last_seen)) e.last_seen = r.updated_at;
+    });
+    memb = Object.values(map).sort((x, y) => String(x.name).localeCompare(String(y.name), 'nl'));
+    renderMem();
   };
   $('#memlist').onclick = async e => {
     const t = e.target.closest('[data-mem]'); if (!t) return;
